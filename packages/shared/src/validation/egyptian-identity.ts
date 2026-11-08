@@ -115,6 +115,18 @@ export function validateEgyptianNationalId(rawInput: string): NationalIdValidati
   };
 }
 
+/**
+ * Masks digits 10-13 of a 14-digit Egyptian National ID with `****`
+ * (e.g. `29005151601234` -> `290051516****4`) to protect PII in UI and logs.
+ */
+export function maskNationalId(nationalId: string): string {
+  const cleaned = nationalId.trim();
+  if (cleaned.length !== 14) {
+    return "**************";
+  }
+  return `${cleaned.slice(0, 9)}****${cleaned.slice(13)}`;
+}
+
 export interface EgyptianPhoneValidationResult {
   isValid: boolean;
   e164?: string;

@@ -1,10 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 
 /**
  * Domain Service for Atomic Donation Allocations & Idempotent Aid Deliveries.
  * Monetary amounts are represented strictly in integer Piasters (قرش) to avoid floating-point errors.
  */
-@Injectable()
 export class AllocationDomainService {
   /**
    * Validates that a volunteer cannot approve a research report or eligibility decision,

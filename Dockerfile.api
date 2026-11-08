@@ -10,6 +10,7 @@ COPY apps/api/package.json ./apps/api/
 FROM base AS builder
 COPY . .
 RUN pnpm install --no-frozen-lockfile
+RUN pnpm --filter @sanad/shared build
 RUN pnpm --filter @sanad/database db:generate
 RUN pnpm --filter @sanad/api build
 

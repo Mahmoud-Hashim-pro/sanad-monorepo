@@ -8,7 +8,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'API Lint OK'",
-    "test": "echo 'API Unit Tests OK'"
+    "test": "node --test src/modules/allocations/allocation.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.8",

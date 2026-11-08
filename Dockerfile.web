@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY . .
 RUN pnpm install --no-frozen-lockfile
+RUN pnpm --filter @sanad/shared build
 RUN pnpm --filter @sanad/web build
 
 EXPOSE 3000

@@ -1,4 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module } from "@nestjs/common";
+import { HealthController } from "./modules/health/health.controller";
+import { PlatformController } from "./modules/platform/platform.controller";
+import { PlatformService } from "./modules/platform/platform.service";
+import { AllocationDomainService } from "./modules/allocations/allocation.service";
 
 /**
  * SANAD Modular Monolith Root Module (Sprint 1 Foundation)
@@ -6,19 +10,8 @@ import { Module } from '@nestjs/common';
  * Domain (Entities/Policies), and Persistence (Prisma Repositories).
  */
 @Module({
-  imports: [
-    // AuthModule,
-    // TenantsModule,
-    // MembershipsModule,
-    // BeneficiariesModule,
-    // HouseholdsModule,
-    // CasesModule,
-    // ResearchModule,
-    // DonorsModule,
-    // DonationsModule,
-    // AllocationsModule,
-    // DeliveriesModule,
-    // AuditModule,
-  ],
+  imports: [],
+  controllers: [HealthController, PlatformController],
+  providers: [AllocationDomainService, PlatformService],
 })
 export class AppModule {}
