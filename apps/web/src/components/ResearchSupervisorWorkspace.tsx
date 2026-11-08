@@ -6,9 +6,18 @@ import {
   type MockCase,
   type EligibilityDecision,
 } from "../lib/mock-data/fictional-seed";
+import { Beneficiary360Modal } from "./Beneficiary360Modal";
+import {
+  type Beneficiary360Profile,
+  INITIAL_BENEFICIARIES_PROFILES,
+  findOrCreateBeneficiaryProfile,
+} from "../lib/mock-data/beneficiaries-data";
 
 interface ResearchSupervisorWorkspaceProps {
   cases: MockCase[];
+  beneficiaryProfiles?: Beneficiary360Profile[];
+  onSelectBeneficiary?: (profile: Beneficiary360Profile) => void;
+  onUpdateBeneficiaryProfile?: (updated: Beneficiary360Profile) => void;
   onAssignVolunteer: (caseId: string, volunteerId: string, volunteerNameAr: string) => void;
   onReviewDecision: (
     caseId: string,
@@ -19,12 +28,32 @@ interface ResearchSupervisorWorkspaceProps {
 
 export function ResearchSupervisorWorkspace({
   cases,
+  beneficiaryProfiles,
+  onSelectBeneficiary,
+  onUpdateBeneficiaryProfile,
   onAssignVolunteer,
   onReviewDecision,
 }: ResearchSupervisorWorkspaceProps) {
   const [selectedVolunteerByCase, setSelectedVolunteerByCase] = useState<
     Record<string, string>
   >({});
+  const [selectedBeneficiaryModal, setSelectedBeneficiaryModal] =
+    useState<Beneficiary360Profile | null>(null);
+
+  const activeBeneficiaryList = beneficiaryProfiles || INITIAL_BENEFICIARIES_PROFILES;
+
+  const handleOpenBeneficiaryProfile = (target: {
+    nationalId?: string;
+    phone?: string;
+    name?: string;
+  }) => {
+    const profile = findOrCreateBeneficiaryProfile(target, activeBeneficiaryList);
+    if (onSelectBeneficiary && profile) {
+      onSelectBeneficiary(profile);
+    } else if (profile) {
+      setSelectedBeneficiaryModal(profile);
+    }
+  };
 
   const getSelectedVol = (caseId: string) =>
     selectedVolunteerByCase[caseId] || FIELD_VOLUNTEERS[0].id;
@@ -88,6 +117,19 @@ export function ResearchSupervisorWorkspace({
                     </p>
                   </div>
                   <div className="text-left space-y-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBeneficiaryProfile({
+                          name: c.beneficiaryNameAr,
+                          phone: c.phoneE164,
+                          nationalId: c.nationalId || c.maskedNationalId,
+                        })
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] cursor-pointer shadow-sm transition block mb-1"
+                    >
+                      👤 بروفايل المستفيد 360°
+                    </button>
                     <span className="block text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 font-bold">
                       البحث: {c.researchStatus}
                     </span>
@@ -209,6 +251,17 @@ export function ResearchSupervisorWorkspace({
           );
         })}
       </section>
+
+      {/* Beneficiary 360 Full Details Modal */}
+      <Beneficiary360Modal
+        profile={selectedBeneficiaryModal}
+        isOpen={Boolean(selectedBeneficiaryModal)}
+        onClose={() => setSelectedBeneficiaryModal(null)}
+        onUpdateProfile={(updated) => {
+          setSelectedBeneficiaryModal(updated);
+          onUpdateBeneficiaryProfile?.(updated);
+        }}
+      />
     </div>
   );
 }

@@ -13,6 +13,13 @@ import {
   type MockDonation,
 } from "../lib/mock-data/fictional-seed";
 import { validateAllocationRequest } from "../lib/domain/sanad-rules";
+import { BeneficiarySearchBar } from "./BeneficiarySearchBar";
+import { Beneficiary360Modal } from "./Beneficiary360Modal";
+import {
+  type Beneficiary360Profile,
+  INITIAL_BENEFICIARIES_PROFILES,
+  findOrCreateBeneficiaryProfile,
+} from "../lib/mock-data/beneficiaries-data";
 
 interface TenantAdminWorkspaceProps {
   mode: "ASSOCIATION" | "INDIVIDUAL";
@@ -21,6 +28,9 @@ interface TenantAdminWorkspaceProps {
   onSelectTenantId: (tenantId: string) => void;
   scopedCases: MockCase[];
   scopedDonations: MockDonation[];
+  beneficiaryProfiles?: Beneficiary360Profile[];
+  onSelectBeneficiary?: (profile: Beneficiary360Profile) => void;
+  onUpdateBeneficiaryProfile?: (updated: Beneficiary360Profile) => void;
   onCreateCase: (payload: {
     tenantId: string;
     beneficiaryNameAr: string;
@@ -54,6 +64,9 @@ export function TenantAdminWorkspace({
   onSelectTenantId,
   scopedCases,
   scopedDonations,
+  beneficiaryProfiles,
+  onSelectBeneficiary,
+  onUpdateBeneficiaryProfile,
   onCreateCase,
   onCreateDonation,
   onConfirmDonation,
@@ -65,6 +78,26 @@ export function TenantAdminWorkspace({
   const [selectedDonationForDetails, setSelectedDonationForDetails] =
     useState<MockDonation | null>(null);
   const [showTenantDetailsModal, setShowTenantDetailsModal] = useState(false);
+
+  // Beneficiary 360 State & Search Handler
+  const [selectedBeneficiary360, setSelectedBeneficiary360] =
+    useState<Beneficiary360Profile | null>(null);
+
+  const activeBeneficiaryList = beneficiaryProfiles || INITIAL_BENEFICIARIES_PROFILES;
+
+  const handleOpenBeneficiaryProfile = (target: {
+    nationalId?: string;
+    phone?: string;
+    name?: string;
+    email?: string;
+  }) => {
+    const profile = findOrCreateBeneficiaryProfile(target, activeBeneficiaryList);
+    if (onSelectBeneficiary && profile) {
+      onSelectBeneficiary(profile);
+    } else if (profile) {
+      setSelectedBeneficiary360(profile);
+    }
+  };
 
   // Modals
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
@@ -308,6 +341,14 @@ export function TenantAdminWorkspace({
         </div>
       </section>
 
+      {/* Central Beneficiary Search & Intelligence */}
+      <BeneficiarySearchBar
+        beneficiaryProfiles={activeBeneficiaryList}
+        onSelectBeneficiary={handleOpenBeneficiaryProfile}
+        titleAr={`الاستعلام عن مستفيد بالرقم القومي / الهاتف (${currentTenant.nameAr})`}
+        subtitleAr="ابحث بالرقم القومي أو رقم الهاتف للوصول الفوري لملف المستفيد الشامل (360°) وسجل المساعدات السابقة لمنع ازدواجية الصرف"
+      />
+
       {/* Cases & Beneficiaries Section */}
       <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -392,8 +433,24 @@ export function TenantAdminWorkspace({
                 >
                   <td className="p-3 font-mono font-bold text-slate-900">{c.caseNumber}</td>
                   <td className="p-3">
-                    <div className="font-bold text-slate-900">{c.beneficiaryNameAr}</div>
-                    <div className="text-slate-500 font-mono">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-slate-900">{c.beneficiaryNameAr}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenBeneficiaryProfile({
+                            name: c.beneficiaryNameAr,
+                            phone: c.phoneE164,
+                            nationalId: c.nationalId || c.maskedNationalId,
+                          });
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold transition cursor-pointer"
+                      >
+                        ملف 360°
+                      </button>
+                    </div>
+                    <div className="text-slate-500 font-mono text-[11px]">
                       {c.maskedNationalId} • {c.householdCode}
                     </div>
                   </td>
@@ -528,11 +585,27 @@ export function TenantAdminWorkspace({
               </p>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = selectedCaseForDetails;
+                  setSelectedCaseForDetails(null);
+                  handleOpenBeneficiaryProfile({
+                    name: target.beneficiaryNameAr,
+                    phone: target.phoneE164,
+                    nationalId: target.nationalId || target.maskedNationalId,
+                  });
+                }}
+                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md cursor-pointer transition flex items-center gap-1.5"
+              >
+                <span>👤</span>
+                <span>عرض بروفايل المستفيد الشامل (Beneficiary 360° Profile) ←</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedCaseForDetails(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
               >
                 إغلاق النافذة
               </button>
@@ -1237,6 +1310,17 @@ export function TenantAdminWorkspace({
           </div>
         </div>
       )}
+
+      {/* Beneficiary 360 Full Details Modal */}
+      <Beneficiary360Modal
+        profile={selectedBeneficiary360}
+        isOpen={Boolean(selectedBeneficiary360)}
+        onClose={() => setSelectedBeneficiary360(null)}
+        onUpdateProfile={(updated) => {
+          setSelectedBeneficiary360(updated);
+          onUpdateBeneficiaryProfile?.(updated);
+        }}
+      />
     </div>
   );
 }

@@ -30,6 +30,11 @@ import {
   type TargetAuthRole,
   type AuthenticatedSessionUser,
 } from "../components/AuthNationalIdWorkspace";
+import {
+  type Beneficiary360Profile,
+  INITIAL_BENEFICIARIES_PROFILES,
+} from "../lib/mock-data/beneficiaries-data";
+import { Beneficiary360Modal } from "../components/Beneficiary360Modal";
 
 const ROLE_LABELS_AR: Record<TargetAuthRole, string> = {
   SUPER_ADMIN: "مدير المنصة المركزي",
@@ -57,6 +62,13 @@ export default function SanadDynamicPlatformPage() {
   const [consents, setConsents] = useState<MockConsentItem[]>([]);
   const [managedUsers, setManagedUsers] = useState<ManagedUserItem[]>([]);
 
+  // Beneficiary 360 State
+  const [beneficiaryProfiles, setBeneficiaryProfiles] = useState<
+    Beneficiary360Profile[]
+  >(INITIAL_BENEFICIARIES_PROFILES);
+  const [activeBeneficiaryModalProfile, setActiveBeneficiaryModalProfile] =
+    useState<Beneficiary360Profile | null>(null);
+
   const [selectedAssnTenantId, setSelectedAssnTenantId] = useState<string>("");
   const [selectedIndTenantId, setSelectedIndTenantId] = useState<string>("");
 
@@ -75,6 +87,26 @@ export default function SanadDynamicPlatformPage() {
       setToast({ message, type });
     },
     []
+  );
+
+  const handleUpdateBeneficiaryProfile = useCallback(
+    (updated: Beneficiary360Profile) => {
+      setBeneficiaryProfiles((prev) => {
+        const idx = prev.findIndex((p) => p.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [updated, ...prev];
+      });
+      setActiveBeneficiaryModalProfile(updated);
+      notify(
+        `تم تحديث بيانات ملف المستفيد (${updated.fullNameAr}) وحفظ التعديلات بنجاح.`,
+        "success"
+      );
+    },
+    [notify]
   );
 
   const fetchLiveDatabaseState = useCallback(async () => {
@@ -914,6 +946,9 @@ export default function SanadDynamicPlatformPage() {
                   sharingRequests={sharingRequests}
                   auditLogs={auditLogs}
                   managedUsers={managedUsers}
+                  beneficiaryProfiles={beneficiaryProfiles}
+                  onSelectBeneficiary={(p) => setActiveBeneficiaryModalProfile(p)}
+                  onUpdateBeneficiaryProfile={handleUpdateBeneficiaryProfile}
                   onUpdateTenantStatus={handleUpdateTenantStatus}
                   onCreateTenant={handleCreateTenant}
                   onDecideSharingRequest={handleDecideSharingRequest}
@@ -946,6 +981,9 @@ export default function SanadDynamicPlatformPage() {
                 scopedDonations={donations.filter(
                   (d) => d.tenantId === activeAssnTenant.id
                 )}
+                beneficiaryProfiles={beneficiaryProfiles}
+                onSelectBeneficiary={(p) => setActiveBeneficiaryModalProfile(p)}
+                onUpdateBeneficiaryProfile={handleUpdateBeneficiaryProfile}
                 onCreateCase={handleCreateCase}
                 onCreateDonation={handleCreateDonation}
                 onConfirmDonation={handleConfirmDonation}
@@ -965,6 +1003,9 @@ export default function SanadDynamicPlatformPage() {
                 scopedDonations={donations.filter(
                   (d) => d.tenantId === activeIndTenant.id
                 )}
+                beneficiaryProfiles={beneficiaryProfiles}
+                onSelectBeneficiary={(p) => setActiveBeneficiaryModalProfile(p)}
+                onUpdateBeneficiaryProfile={handleUpdateBeneficiaryProfile}
                 onCreateCase={handleCreateCase}
                 onCreateDonation={handleCreateDonation}
                 onConfirmDonation={handleConfirmDonation}
@@ -975,6 +1016,9 @@ export default function SanadDynamicPlatformPage() {
             {effectiveRoleView === "RESEARCH_SUPERVISOR" && (
               <ResearchSupervisorWorkspace
                 cases={cases}
+                beneficiaryProfiles={beneficiaryProfiles}
+                onSelectBeneficiary={(p) => setActiveBeneficiaryModalProfile(p)}
+                onUpdateBeneficiaryProfile={handleUpdateBeneficiaryProfile}
                 onAssignVolunteer={handleAssignVolunteer}
                 onReviewDecision={handleReviewDecision}
               />
@@ -984,6 +1028,9 @@ export default function SanadDynamicPlatformPage() {
               <VolunteerWorkspace
                 cases={cases}
                 deliveries={deliveries}
+                beneficiaryProfiles={beneficiaryProfiles}
+                onSelectBeneficiary={(p) => setActiveBeneficiaryModalProfile(p)}
+                onUpdateBeneficiaryProfile={handleUpdateBeneficiaryProfile}
                 onSubmitFieldReport={handleSubmitFieldReport}
                 onConfirmDelivery={handleConfirmDelivery}
                 onAttemptDirectApproval={handleVolunteerAttemptDirectApproval}
@@ -1003,6 +1050,14 @@ export default function SanadDynamicPlatformPage() {
           </>
         )}
       </main>
+
+      {/* Global Beneficiary 360 Full Details Modal */}
+      <Beneficiary360Modal
+        profile={activeBeneficiaryModalProfile}
+        isOpen={Boolean(activeBeneficiaryModalProfile)}
+        onClose={() => setActiveBeneficiaryModalProfile(null)}
+        onUpdateProfile={handleUpdateBeneficiaryProfile}
+      />
     </div>
   );
 }

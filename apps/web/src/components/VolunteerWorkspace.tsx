@@ -2,10 +2,19 @@
 
 import React, { useState } from "react";
 import type { MockCase, MockDelivery } from "../lib/mock-data/fictional-seed";
+import { Beneficiary360Modal } from "./Beneficiary360Modal";
+import {
+  type Beneficiary360Profile,
+  INITIAL_BENEFICIARIES_PROFILES,
+  findOrCreateBeneficiaryProfile,
+} from "../lib/mock-data/beneficiaries-data";
 
 interface VolunteerWorkspaceProps {
   cases: MockCase[];
   deliveries: MockDelivery[];
+  beneficiaryProfiles?: Beneficiary360Profile[];
+  onSelectBeneficiary?: (profile: Beneficiary360Profile) => void;
+  onUpdateBeneficiaryProfile?: (updated: Beneficiary360Profile) => void;
   onSubmitFieldReport: (payload: {
     caseId: string;
     incomeEgp: number;
@@ -19,12 +28,33 @@ interface VolunteerWorkspaceProps {
 export function VolunteerWorkspace({
   cases,
   deliveries,
+  beneficiaryProfiles,
+  onSelectBeneficiary,
+  onUpdateBeneficiaryProfile,
   onSubmitFieldReport,
   onConfirmDelivery,
   onAttemptDirectApproval,
 }: VolunteerWorkspaceProps) {
   const [selectedCaseId, setSelectedCaseId] = useState<string>(cases[0]?.id || "");
   const activeCase = cases.find((c) => c.id === selectedCaseId) || cases[0] || null;
+
+  const [selectedBeneficiaryModal, setSelectedBeneficiaryModal] =
+    useState<Beneficiary360Profile | null>(null);
+
+  const activeBeneficiaryList = beneficiaryProfiles || INITIAL_BENEFICIARIES_PROFILES;
+
+  const handleOpenBeneficiaryProfile = (target: {
+    nationalId?: string;
+    phone?: string;
+    name?: string;
+  }) => {
+    const profile = findOrCreateBeneficiaryProfile(target, activeBeneficiaryList);
+    if (onSelectBeneficiary && profile) {
+      onSelectBeneficiary(profile);
+    } else if (profile) {
+      setSelectedBeneficiaryModal(profile);
+    }
+  };
 
   const [incomeInput, setIncomeInput] = useState<number>(
     activeCase?.householdIncomeEgp || 2600
@@ -116,6 +146,22 @@ export function VolunteerWorkspace({
                   </option>
                 ))}
               </select>
+              {activeCase && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleOpenBeneficiaryProfile({
+                      name: activeCase.beneficiaryNameAr,
+                      phone: activeCase.phoneE164,
+                      nationalId: activeCase.nationalId || activeCase.maskedNationalId,
+                    })
+                  }
+                  className="w-full mt-2 py-2 px-3 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <span>👤</span>
+                  <span>معاينة وتحديث ملف المستفيد الشامل (360° Profile)</span>
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -254,6 +300,17 @@ export function VolunteerWorkspace({
           </div>
         </section>
       </div>
+
+      {/* Beneficiary 360 Full Details Modal */}
+      <Beneficiary360Modal
+        profile={selectedBeneficiaryModal}
+        isOpen={Boolean(selectedBeneficiaryModal)}
+        onClose={() => setSelectedBeneficiaryModal(null)}
+        onUpdateProfile={(updated) => {
+          setSelectedBeneficiaryModal(updated);
+          onUpdateBeneficiaryProfile?.(updated);
+        }}
+      />
     </div>
   );
 }

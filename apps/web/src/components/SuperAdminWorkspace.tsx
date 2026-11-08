@@ -10,6 +10,13 @@ import type {
   TenantStatus,
 } from "../lib/mock-data/fictional-seed";
 import type { TargetAuthRole } from "./AuthNationalIdWorkspace";
+import { BeneficiarySearchBar } from "./BeneficiarySearchBar";
+import { Beneficiary360Modal } from "./Beneficiary360Modal";
+import {
+  type Beneficiary360Profile,
+  INITIAL_BENEFICIARIES_PROFILES,
+  findOrCreateBeneficiaryProfile,
+} from "../lib/mock-data/beneficiaries-data";
 
 export interface ManagedUserItem {
   email: string;
@@ -58,6 +65,9 @@ interface SuperAdminWorkspaceProps {
     tenantNameAr?: string | null;
   }) => void;
   onInspectTenantWorkspace?: (tenant: MockTenant) => void;
+  beneficiaryProfiles?: Beneficiary360Profile[];
+  onSelectBeneficiary?: (profile: Beneficiary360Profile) => void;
+  onUpdateBeneficiaryProfile?: (updated: Beneficiary360Profile) => void;
 }
 
 export function SuperAdminWorkspace({
@@ -72,10 +82,33 @@ export function SuperAdminWorkspace({
   onDecideSharingRequest,
   onAssignEmailRole,
   onInspectTenantWorkspace,
+  beneficiaryProfiles,
+  onSelectBeneficiary,
+  onUpdateBeneficiaryProfile,
 }: SuperAdminWorkspaceProps) {
   const [tenantFilter, setTenantFilter] = useState<"ALL" | TenantStatus>("ALL");
   const [auditSearch, setAuditSearch] = useState("");
   const [showAddTenantModal, setShowAddTenantModal] = useState(false);
+
+  // Beneficiary 360 State & Search Handler
+  const [internalBeneficiaryModal, setInternalBeneficiaryModal] =
+    useState<Beneficiary360Profile | null>(null);
+
+  const activeBeneficiaryList = beneficiaryProfiles || INITIAL_BENEFICIARIES_PROFILES;
+
+  const handleOpenBeneficiaryProfile = (target: {
+    nationalId?: string;
+    phone?: string;
+    name?: string;
+    email?: string;
+  }) => {
+    const profile = findOrCreateBeneficiaryProfile(target, activeBeneficiaryList);
+    if (onSelectBeneficiary && profile) {
+      onSelectBeneficiary(profile);
+    } else if (profile) {
+      setInternalBeneficiaryModal(profile);
+    }
+  };
 
   // Interactive Detail Modals for Every Card/Row
   const [selectedTenantDetails, setSelectedTenantDetails] =
@@ -197,6 +230,14 @@ export function SuperAdminWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => scrollToSection("section-beneficiary-intelligence")}
+              className="px-4 py-2 rounded-xl bg-purple-900 hover:bg-purple-950 text-white text-xs font-bold shadow-sm cursor-pointer transition flex items-center gap-1.5"
+            >
+              <span>🔍</span>
+              <span>استعلام بالرقم القومي / الهاتف</span>
+            </button>
+            <button
+              type="button"
               onClick={() => scrollToSection("section-user-roles")}
               className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm cursor-pointer transition"
             >
@@ -270,6 +311,14 @@ export function SuperAdminWorkspace({
             </div>
           </button>
         </div>
+      </section>
+
+      {/* Central Beneficiary Intelligence & Search (360° Profile) */}
+      <section id="section-beneficiary-intelligence" className="space-y-2">
+        <BeneficiarySearchBar
+          beneficiaryProfiles={activeBeneficiaryList}
+          onSelectBeneficiary={handleOpenBeneficiaryProfile}
+        />
       </section>
 
       {/* Clickable Charity / Initiative Cards + Table */}
@@ -568,11 +617,29 @@ export function SuperAdminWorkspace({
                 return (
                   <tr
                     key={u.email}
-                    onClick={() => setSelectedUserDetails(u)}
+                    onClick={() => {
+                      if (u.role === "BENEFICIARY") {
+                        handleOpenBeneficiaryProfile({
+                          email: u.email,
+                          name: u.fullNameAr,
+                          phone: u.phoneE164,
+                          nationalId: u.maskedNationalId,
+                        });
+                      } else {
+                        setSelectedUserDetails(u);
+                      }
+                    }}
                     className="border-b border-slate-100 hover:bg-purple-50/40 cursor-pointer transition"
                   >
                     <td className="p-3 font-bold text-slate-900">
-                      {u.fullNameAr}
+                      <div className="flex items-center gap-1.5">
+                        <span>{u.fullNameAr}</span>
+                        {u.role === "BENEFICIARY" && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 font-bold">
+                            ملف مستفيد 360°
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 font-mono text-purple-900 font-semibold">
                       {u.email}
@@ -597,6 +664,23 @@ export function SuperAdminWorkspace({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex flex-wrap items-center gap-2">
+                        {u.role === "BENEFICIARY" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleOpenBeneficiaryProfile({
+                                email: u.email,
+                                name: u.fullNameAr,
+                                phone: u.phoneE164,
+                                nationalId: u.maskedNationalId,
+                              })
+                            }
+                            className="px-2.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] cursor-pointer transition flex items-center gap-1 shadow-sm"
+                          >
+                            <span>👤</span>
+                            <span>ملف المستفيد (360°)</span>
+                          </button>
+                        )}
                         <select
                           aria-label={`تغيير دور ${u.email}`}
                           value={selectedRoleForRow}
@@ -630,7 +714,7 @@ export function SuperAdminWorkspace({
                               tenantNameAr: u.tenantNameAr,
                             })
                           }
-                          className="px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold cursor-pointer transition"
+                          className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold cursor-pointer transition text-xs"
                         >
                           تحديث الدور
                         </button>
@@ -1104,11 +1188,40 @@ export function SuperAdminWorkspace({
               </div>
             </div>
 
+            {selectedUserDetails.role === "BENEFICIARY" && (
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 space-y-2 text-right">
+                <div className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                  <span>🧕</span>
+                  <span>هذا المستخدم مسجل كمستفيد بالخدمة ولديه ملف بحث اجتماعي شامل</span>
+                </div>
+                <p className="text-[11px] text-purple-800">
+                  يمكنك الاطلاع على كافة تفاصيل السكن، أفراد الأسرة، الدخل والديون، أرقام هواتف فريق البحث، وسجل المساعدات السابقة الموحد.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const u = selectedUserDetails;
+                    setSelectedUserDetails(null);
+                    handleOpenBeneficiaryProfile({
+                      email: u.email,
+                      name: u.fullNameAr,
+                      phone: u.phoneE164,
+                      nationalId: u.maskedNationalId.replace(/\*/g, ""),
+                    });
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md cursor-pointer transition flex items-center justify-center gap-2"
+                >
+                  <span>👤</span>
+                  <span>عرض بروفايل المستفيد الشامل (Beneficiary 360° Profile) ←</span>
+                </button>
+              </div>
+            )}
+
             <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => setSelectedUserDetails(null)}
-                className="px-4 py-2 rounded-xl bg-purple-700 text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
               >
                 إغلاق
               </button>
@@ -1402,6 +1515,17 @@ export function SuperAdminWorkspace({
           </form>
         </div>
       )}
+
+      {/* Beneficiary 360 Full Details Modal */}
+      <Beneficiary360Modal
+        profile={internalBeneficiaryModal}
+        isOpen={Boolean(internalBeneficiaryModal)}
+        onClose={() => setInternalBeneficiaryModal(null)}
+        onUpdateProfile={(updated) => {
+          setInternalBeneficiaryModal(updated);
+          onUpdateBeneficiaryProfile?.(updated);
+        }}
+      />
     </div>
   );
 }
