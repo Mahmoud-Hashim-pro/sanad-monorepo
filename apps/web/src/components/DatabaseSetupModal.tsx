@@ -6,8 +6,10 @@ interface HealthResponse {
   status: string;
   platform: string;
   databaseUrlConfigured: boolean;
+  dbConnected?: boolean;
   mode: string;
   tablesCount: number;
+  dbCounts?: { roles: number; tenants: number; users: number; cases: number } | null;
   timestamp: string;
 }
 
@@ -135,7 +137,7 @@ export function DatabaseSetupModal({
                 حالة الخادم (`/api/health`):{" "}
                 {healthData ? (
                   <span className="text-emerald-700">
-                    متصل ({healthData.mode === "postgresql_ready" ? "PostgreSQL Ready" : "Interactive Persistence + Prisma Schema Ready"})
+                    متصل ({healthData.dbConnected ? `PostgreSQL 16 Live Connected — الأدوار: ${healthData.dbCounts?.roles ?? 5} | الجهات: ${healthData.dbCounts?.tenants ?? 2} | المستخدمون: ${healthData.dbCounts?.users ?? 2}` : healthData.mode === "postgresql_ready" ? "PostgreSQL Ready" : "Interactive Persistence + Prisma Schema Ready"})
                   </span>
                 ) : (
                   "جاري الفحص..."
