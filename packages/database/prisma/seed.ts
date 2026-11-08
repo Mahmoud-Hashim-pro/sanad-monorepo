@@ -149,7 +149,54 @@ async function main() {
     }
   }
 
-  // 3. Seed Fictional PersonIdentities & Users
+  // 3. Seed Super Admin (eng.mhashim@gmail.com) & Fictional PersonIdentities / Users
+  const superAdminIdentity = await prisma.personIdentity.upsert({
+    where: { nationalIdHmac: "hmac_super_admin_eng_mhashim_29501010101234" },
+    update: {},
+    create: {
+      id: "11111111-1111-4111-8111-111111111100",
+      nationalIdHmac: "hmac_super_admin_eng_mhashim_29501010101234",
+      nationalIdEncrypted: "enc_v1_super_admin_29501010101234",
+      maskedNationalId: "295010101****4",
+      birthDate: new Date("1995-01-01T00:00:00.000Z"),
+      governorateCode: "01",
+      isVerified: true,
+      verifiedAt: new Date("2026-01-01T09:00:00.000Z"),
+    },
+  });
+
+  const superAdminUser = await prisma.user.upsert({
+    where: { personIdentityId: superAdminIdentity.id },
+    update: {
+      fullNameAr: "م. محمود هاشم — مدير المنصة المركزي (eng.mhashim@gmail.com)",
+      status: AccountStatus.ACTIVE,
+    },
+    create: {
+      id: "22222222-2222-4222-8222-222222222200",
+      personIdentityId: superAdminIdentity.id,
+      fullNameAr: "م. محمود هاشم — مدير المنصة المركزي (eng.mhashim@gmail.com)",
+      passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$super_admin_eng_mhashim",
+      status: AccountStatus.ACTIVE,
+    },
+  });
+
+  await prisma.auditLog.upsert({
+    where: { id: "99999999-9999-4999-8999-999999999900" },
+    update: {},
+    create: {
+      id: "99999999-9999-4999-8999-999999999900",
+      actorUserId: superAdminUser.id,
+      actionCode: "SUPER_ADMIN_ACCOUNT_PROVISIONED",
+      resourceType: "User",
+      resourceId: superAdminUser.id,
+      metadataJson: {
+        email: "eng.mhashim@gmail.com",
+        role: "SUPER_ADMIN",
+        fullNameAr: "م. محمود هاشم",
+      },
+    },
+  });
+
   const gharbiaOwnerIdentity = await prisma.personIdentity.upsert({
     where: { nationalIdHmac: "hmac_fictional_gharbia_admin_28003101601118" },
     update: {},

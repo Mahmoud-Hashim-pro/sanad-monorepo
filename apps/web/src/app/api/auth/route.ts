@@ -34,7 +34,10 @@ export async function POST(request: Request) {
     const fullName = (body.fullName || "").trim();
     const password = body.password || "";
     const otp = (body.otp || "").trim();
-    const targetRole = body.targetRole || "ASSOCIATION_ADMIN";
+    const isDesignatedSuperAdmin = email.toLowerCase() === "eng.mhashim@gmail.com";
+    const targetRole = isDesignatedSuperAdmin
+      ? "SUPER_ADMIN"
+      : body.targetRole || "ASSOCIATION_ADMIN";
 
     const nidResult = validateEgyptianNationalId(nationalId);
     if (!nidResult.isValid || !nidResult.parsed) {

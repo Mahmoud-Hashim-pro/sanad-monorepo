@@ -47,6 +47,16 @@ const DEMO_PRESETS: Array<{
   orgNameAr: string;
 }> = [
   {
+    id: "preset-super-admin",
+    labelAr: "مدير المنصة المركزي (Super Admin — eng.mhashim@gmail.com)",
+    role: "SUPER_ADMIN",
+    fullName: "محمود هاشم مدير المنصة",
+    email: "eng.mhashim@gmail.com",
+    nationalId: "29501010101234",
+    mobile: "01000000001",
+    orgNameAr: "الإدارة المركزية لمنصة سَنَد (SANAD Super Admin)",
+  },
+  {
     id: "preset-assn",
     labelAr: "تعبئة رقم قومي تجريبي (مدير جمعية - الغربية)",
     role: "ASSOCIATION_ADMIN",
@@ -84,16 +94,16 @@ export function AuthNationalIdWorkspace({
   onNotify,
 }: AuthNationalIdWorkspaceProps) {
   const [authMode, setAuthMode] = useState<"LOGIN" | "REGISTER">("REGISTER");
-  const [targetRole, setTargetRole] = useState<TargetAuthRole>("ASSOCIATION_ADMIN");
+  const [targetRole, setTargetRole] = useState<TargetAuthRole>("SUPER_ADMIN");
 
   // Form fields
-  const [fullNameInput, setFullNameInput] = useState("عمرو عبد العزيز الشرقاوي");
-  const [emailInput, setEmailInput] = useState("amr.sharkawy@alnoor-charity.org.eg");
-  const [nationalIdInput, setNationalIdInput] = useState("28509141601234");
-  const [mobileInput, setMobileInput] = useState("01012345678");
+  const [fullNameInput, setFullNameInput] = useState("محمود هاشم مدير المنصة");
+  const [emailInput, setEmailInput] = useState("eng.mhashim@gmail.com");
+  const [nationalIdInput, setNationalIdInput] = useState("29501010101234");
+  const [mobileInput, setMobileInput] = useState("01000000001");
   const [passwordInput, setPasswordInput] = useState("Sanad@2026#Secure");
   const [orgNameInput, setOrgNameInput] = useState(
-    "جمعية النور للتكافل والتنمية الاجتماعية بطنطا"
+    "الإدارة المركزية لمنصة سَنَد (SANAD Super Admin)"
   );
   const [otpInput, setOtpInput] = useState("482910");
 

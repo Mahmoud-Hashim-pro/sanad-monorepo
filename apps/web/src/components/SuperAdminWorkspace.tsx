@@ -85,7 +85,7 @@ export function SuperAdminWorkspace({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <span className="text-xs font-semibold text-purple-800 bg-purple-100 px-2.5 py-1 rounded-md">
-              لوحة الحوكمة المركزية (SUPER_ADMIN)
+              لوحة الحوكمة المركزية (SUPER_ADMIN) • الحساب المعتمد: eng.mhashim@gmail.com
             </span>
             <h2 className="text-xl font-bold text-slate-900 mt-1">
               إدارة المنصة واعتماد الجمعيات الخيرية والمبادرات الفردية
