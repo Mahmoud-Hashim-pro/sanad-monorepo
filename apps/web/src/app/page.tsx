@@ -910,6 +910,7 @@ export default function SanadDynamicPlatformPage() {
                 <SuperAdminWorkspace
                   tenants={tenants}
                   cases={cases}
+                  donations={donations}
                   sharingRequests={sharingRequests}
                   auditLogs={auditLogs}
                   managedUsers={managedUsers}
@@ -917,6 +918,19 @@ export default function SanadDynamicPlatformPage() {
                   onCreateTenant={handleCreateTenant}
                   onDecideSharingRequest={handleDecideSharingRequest}
                   onAssignEmailRole={handleAssignEmailRole}
+                  onInspectTenantWorkspace={(tenant) => {
+                    if (tenant.type === "ASSOCIATION") {
+                      setSelectedAssnTenantId(tenant.id);
+                      setActiveView("ASSOCIATION_ADMIN");
+                    } else {
+                      setSelectedIndTenantId(tenant.id);
+                      setActiveView("INDIVIDUAL_INITIATIVE");
+                    }
+                    notify(
+                      `تم فتح مساحة عمل "${tenant.nameAr}" لعرض وتعديل بياناتها.`,
+                      "success"
+                    );
+                  }}
                 />
               )}
 

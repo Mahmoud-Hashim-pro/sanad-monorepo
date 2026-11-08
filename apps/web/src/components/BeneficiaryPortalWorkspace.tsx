@@ -42,6 +42,8 @@ export function BeneficiaryPortalWorkspace({
 
   const [selectedReceiptDelivery, setSelectedReceiptDelivery] =
     useState<MockDelivery | null>(null);
+  const [selectedCaseDetails, setSelectedCaseDetails] =
+    useState<MockCase | null>(null);
 
   const verifiedDeliveries = deliveries.filter((d) => d.status === "CONFIRMED");
 
@@ -188,7 +190,16 @@ export function BeneficiaryPortalWorkspace({
             {cases.slice(0, 4).map((c) => (
               <div
                 key={c.id}
-                className="rounded-xl border border-slate-200 p-4 bg-slate-50/70 space-y-3"
+                onClick={() => setSelectedCaseDetails(c)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedCaseDetails(c);
+                  }
+                }}
+                className="rounded-xl border border-slate-200 hover:border-purple-400 p-4 bg-slate-50/70 hover:bg-purple-50/30 space-y-3 cursor-pointer transition shadow-sm"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -197,8 +208,13 @@ export function BeneficiaryPortalWorkspace({
                     </span>
                     <div className="font-bold text-sm text-slate-900">{c.categoryAr}</div>
                   </div>
-                  <div className="text-xs font-bold text-slate-800">
-                    المبلغ المطلوب: {c.requestedEgp.toLocaleString("ar-EG")} ج.م
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800">
+                      المبلغ المطلوب: {c.requestedEgp.toLocaleString("ar-EG")} ج.م
+                    </span>
+                    <span className="text-[11px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                      عرض التفاصيل
+                    </span>
                   </div>
                 </div>
 
@@ -375,9 +391,79 @@ export function BeneficiaryPortalWorkspace({
               <button
                 type="button"
                 onClick={() => setSelectedReceiptDelivery(null)}
-                className="px-4 py-2 rounded-xl bg-purple-700 text-white text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-purple-700 text-white text-xs font-bold cursor-pointer"
               >
                 إغلاق الإيصال
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Case Lifecycle Details Modal */}
+      {selectedCaseDetails && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setSelectedCaseDetails(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <span className="text-xs font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">
+                  {selectedCaseDetails.caseNumber}
+                </span>
+                <h3 className="text-base font-bold text-slate-900 mt-1">
+                  تفاصيل الطلب: {selectedCaseDetails.categoryAr}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCaseDetails(null)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div>
+                <span className="text-slate-500 block">اسم المستفيد:</span>
+                <strong>{selectedCaseDetails.beneficiaryNameAr}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">المحافظة:</span>
+                <strong>{selectedCaseDetails.governorate}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">المبلغ المطلوب:</span>
+                <strong className="font-mono text-purple-900">
+                  {selectedCaseDetails.requestedEgp.toLocaleString("ar-EG")} ج.م
+                </strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">الباحث الميداني المكلّف:</span>
+                <strong>{selectedCaseDetails.assignedVolunteerAr}</strong>
+              </div>
+              <div className="col-span-2 pt-2 border-t border-slate-200">
+                <span className="text-slate-500 block">ملاحظات وتفاصيل الملف:</span>
+                <p className="font-semibold text-slate-800 mt-1">
+                  {selectedCaseDetails.researchNotesAr}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedCaseDetails(null)}
+                className="px-4 py-2 rounded-xl bg-purple-700 text-white text-xs font-bold cursor-pointer"
+              >
+                إغلاق
               </button>
             </div>
           </div>

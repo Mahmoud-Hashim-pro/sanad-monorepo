@@ -221,33 +221,13 @@ export function AuthNationalIdWorkspace({
             )}
           </div>
 
-          <div className="space-y-4 pt-4">
+          <div className="space-y-4 pt-6">
             <h2 className="text-2xl lg:text-3xl font-extrabold leading-snug text-white">
               الحوكمة الرقمية لإدارة الجمعيات الخيرية والمبادرات والبحث الميداني
             </h2>
             <p className="text-sm text-purple-100/90 leading-relaxed">
               توفر منصة سَنَد بيئة موحدة لتسجيل المستفيدين بالرقم القومي المصري لمنع ازدواج الصرف، إدارة الأبحاث الميدانية باستقلالية كاملة، وتخصيص التبرعات المقيدة وغير المقيدة بشفافية.
             </p>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-2">
-              <div className="text-xs font-bold text-emerald-300">
-                ✓ عزل كامل لبيانات كل جمعية ومبادرة
-              </div>
-              <p className="text-xs text-purple-100 leading-relaxed">
-                تعمل كل جهة خيرية أو مبادرة فردية داخل نطاق بيانات مستقل مع إمكانية التحقق المركزي لمنع تكرار صرف نفس المساعدة.
-              </p>
-            </div>
-
-            <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-2">
-              <div className="text-xs font-bold text-emerald-300">
-                ✓ فصل المهام الرقابية في البحث الاجتماعي
-              </div>
-              <p className="text-xs text-purple-100 leading-relaxed">
-                يرفع الباحث الميداني تقرير الزيارة، بينما يختص مشرف البحث الاجتماعي بمراجعة واعتماد قرار الأهلية.
-              </p>
-            </div>
           </div>
         </div>
 
@@ -369,42 +349,46 @@ export function AuthNationalIdWorkspace({
               )}
             </div>
 
-            {/* Password Input */}
+            {/* Password Input with Built-In Eye Button Inside Input */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="auth-password-input"
-                  className="block text-xs font-bold text-slate-800"
-                >
-                  كلمة المرور *
-                </label>
+              <label
+                htmlFor="auth-password-input"
+                className="block text-xs font-bold text-slate-800"
+              >
+                كلمة المرور *
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  id="auth-password-input"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete={
+                    authMode === "LOGIN" ? "current-password" : "new-password"
+                  }
+                  dir="ltr"
+                  required
+                  placeholder="••••••••"
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    if (formErrorAr) setFormErrorAr(null);
+                  }}
+                  className="w-full rounded-xl border border-slate-300 pl-3.5 pr-28 py-2.5 text-sm font-mono text-left focus:border-purple-600 focus:outline-none"
+                />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="text-xs font-bold text-purple-700 hover:text-purple-900 cursor-pointer"
+                  aria-label={
+                    showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"
+                  }
+                  className="absolute right-2 px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 text-xs font-bold cursor-pointer flex items-center gap-1.5 transition"
                 >
-                  {showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                  <span>{showPassword ? "🙈" : "👁️"}</span>
+                  <span>{showPassword ? "إخفاء" : "إظهار"}</span>
                 </button>
               </div>
-              <input
-                id="auth-password-input"
-                type={showPassword ? "text" : "password"}
-                autoComplete={
-                  authMode === "LOGIN" ? "current-password" : "new-password"
-                }
-                dir="ltr"
-                required
-                placeholder="••••••••"
-                value={passwordInput}
-                onChange={(e) => {
-                  setPasswordInput(e.target.value);
-                  if (formErrorAr) setFormErrorAr(null);
-                }}
-                className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-mono text-left focus:border-purple-600 focus:outline-none"
-              />
             </div>
 
-            {/* Mandatory National ID & Mobile in Register Mode (Zero OTP) */}
+            {/* Mandatory National ID & Mobile in Register Mode */}
             {authMode === "REGISTER" && (
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">

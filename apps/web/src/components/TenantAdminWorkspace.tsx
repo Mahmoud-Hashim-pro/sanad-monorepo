@@ -62,6 +62,9 @@ export function TenantAdminWorkspace({
   const [caseSearch, setCaseSearch] = useState("");
   const [caseStatusFilter, setCaseStatusFilter] = useState<string>("ALL");
   const [selectedCaseForDetails, setSelectedCaseForDetails] = useState<MockCase | null>(null);
+  const [selectedDonationForDetails, setSelectedDonationForDetails] =
+    useState<MockDonation | null>(null);
+  const [showTenantDetailsModal, setShowTenantDetailsModal] = useState(false);
 
   // Modals
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
@@ -202,19 +205,34 @@ export function TenantAdminWorkspace({
 
   return (
     <div className="space-y-6">
-      {/* Tenant Scope Header & Financial Summary */}
+      {/* Tenant Scope Header & Financial Summary (Clickable) */}
       <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-1">
+          <div
+            onClick={() => setShowTenantDetailsModal(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setShowTenantDetailsModal(true);
+              }
+            }}
+            className="space-y-1 cursor-pointer group"
+          >
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-purple-800 bg-purple-100 px-2.5 py-1 rounded-md">
-                نطاق المستأجر المعزول ({currentTenant.type})
+                {currentTenant.type === "ASSOCIATION"
+                  ? "جمعية خيرية مشهرة"
+                  : "مبادرة فردية مستقلة"}
               </span>
-              <span className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                عزل كامل للبيانات (Row-Level Tenant Isolation)
+              <span className="text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-0.5 rounded-full group-hover:bg-purple-100 transition">
+                اضغط لعرض بطاقة تفاصيل الجهة الكاملة ←
               </span>
             </div>
-            <h2 className="text-xl font-bold text-slate-900">{currentTenant.nameAr}</h2>
+            <h2 className="text-xl font-bold text-slate-900 group-hover:text-purple-800 transition">
+              {currentTenant.nameAr}
+            </h2>
             <p className="text-xs text-slate-600">
               المحافظة: {currentTenant.governorate}{" "}
               {currentTenant.registrationNumber
@@ -223,49 +241,70 @@ export function TenantAdminWorkspace({
             </p>
           </div>
 
-          {availableTenantsOfType.length > 1 && (
-            <div className="space-y-1">
-              <label
-                htmlFor="tenant-switcher-select"
-                className="block text-xs font-bold text-slate-700"
-              >
-                تبديل الجهة النشطة ضمن نفس الدور:
-              </label>
-              <select
-                id="tenant-switcher-select"
-                value={currentTenant.id}
-                onChange={(e) => onSelectTenantId(e.target.value)}
-                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold bg-slate-50"
-              >
-                {availableTenantsOfType.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.nameAr} ({t.status === "ACTIVE" ? "نشط" : "غير مفعل"})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowTenantDetailsModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-bold cursor-pointer transition"
+            >
+              عرض كافة تفاصيل الجهة
+            </button>
+            {availableTenantsOfType.length > 1 && (
+              <div className="space-y-1">
+                <label
+                  htmlFor="tenant-switcher-select"
+                  className="block text-xs font-bold text-slate-700"
+                >
+                  تبديل الجهة النشطة:
+                </label>
+                <select
+                  id="tenant-switcher-select"
+                  value={currentTenant.id}
+                  onChange={(e) => onSelectTenantId(e.target.value)}
+                  className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold bg-slate-50 cursor-pointer"
+                >
+                  {availableTenantsOfType.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nameAr} ({t.status === "ACTIVE" ? "نشط" : "غير مفعل"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setShowTenantDetailsModal(true)}
+            className="bg-slate-50 hover:bg-slate-100 p-3.5 rounded-xl border border-slate-200 cursor-pointer transition text-center"
+          >
             <div className="text-xs text-slate-600">إجمالي التبرعات المؤكدة للجهة</div>
             <div className="text-lg font-bold text-slate-900 mt-1">
               {currentTenant.confirmedDonationsEgp.toLocaleString("ar-EG")} ج.م
             </div>
-          </div>
-          <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200">
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowTenantDetailsModal(true)}
+            className="bg-amber-50 hover:bg-amber-100 p-3.5 rounded-xl border border-amber-200 cursor-pointer transition text-center"
+          >
             <div className="text-xs text-amber-900">مبالغ محجوزة للتخصيص الذري</div>
             <div className="text-lg font-bold text-amber-900 mt-1">
               {currentTenant.reservedAllocationsEgp.toLocaleString("ar-EG")} ج.م
             </div>
-          </div>
-          <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowTenantDetailsModal(true)}
+            className="bg-emerald-50 hover:bg-emerald-100 p-3.5 rounded-xl border border-emerald-200 cursor-pointer transition text-center"
+          >
             <div className="text-xs text-emerald-900">الرصيد المتاح للتخصيص الفوري</div>
             <div className="text-lg font-bold text-emerald-900 mt-1">
               {currentTenant.availableBalanceEgp.toLocaleString("ar-EG")} ج.م
             </div>
-          </div>
+          </button>
         </div>
       </section>
 
@@ -346,7 +385,11 @@ export function TenantAdminWorkspace({
             </thead>
             <tbody>
               {filteredCases.map((c) => (
-                <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                <tr
+                  key={c.id}
+                  onClick={() => setSelectedCaseForDetails(c)}
+                  className="border-b border-slate-100 hover:bg-purple-50/40 cursor-pointer transition"
+                >
                   <td className="p-3 font-mono font-bold text-slate-900">{c.caseNumber}</td>
                   <td className="p-3">
                     <div className="font-bold text-slate-900">{c.beneficiaryNameAr}</div>
@@ -694,7 +737,16 @@ export function TenantAdminWorkspace({
             {scopedDonations.map((don) => (
               <div
                 key={don.id}
-                className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70 space-y-2"
+                onClick={() => setSelectedDonationForDetails(don)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedDonationForDetails(don);
+                  }
+                }}
+                className="rounded-xl border border-slate-200 hover:border-purple-400 p-3.5 bg-slate-50/70 hover:bg-purple-50/30 space-y-2 cursor-pointer transition shadow-sm"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -703,17 +755,22 @@ export function TenantAdminWorkspace({
                     </span>
                     <div className="font-bold text-xs text-slate-900">{don.donorNameAr}</div>
                   </div>
-                  <span
-                    className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                      don.status === "PENDING_VERIFICATION"
-                        ? "bg-amber-100 text-amber-900"
-                        : "bg-emerald-100 text-emerald-800"
-                    }`}
-                  >
-                    {don.status === "PENDING_VERIFICATION"
-                      ? "بانتظار تأكيد الاستلام"
-                      : "مؤكد ومتاح للتخصيص"}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                        don.status === "PENDING_VERIFICATION"
+                          ? "bg-amber-100 text-amber-900"
+                          : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {don.status === "PENDING_VERIFICATION"
+                        ? "بانتظار تأكيد الاستلام"
+                        : "مؤكد ومتاح للتخصيص"}
+                    </span>
+                    <span className="text-[11px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                      التفاصيل
+                    </span>
+                  </div>
                 </div>
 
                 <div className="text-xs text-slate-700">
@@ -987,18 +1044,197 @@ export function TenantAdminWorkspace({
               <button
                 type="button"
                 onClick={() => setShowNewDonationModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
               >
                 حفظ وإصدار إيصال التبرع
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Donation Details Modal */}
+      {selectedDonationForDetails && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setSelectedDonationForDetails(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <span className="text-xs font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">
+                  {selectedDonationForDetails.receiptNumber}
+                </span>
+                <h3 className="text-base font-bold text-slate-900 mt-1">
+                  تفاصيل إيصال التبرع: {selectedDonationForDetails.donorNameAr}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDonationForDetails(null)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <div>
+                <span className="text-slate-500 block">نوع التبرع:</span>
+                <strong>
+                  {selectedDonationForDetails.donationType === "MONETARY"
+                    ? "تبرع نقدي"
+                    : "تبرع عيني"}
+                </strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">تاريخ الإيصال:</span>
+                <strong className="font-mono">
+                  {selectedDonationForDetails.createdAt}
+                </strong>
+              </div>
+              <div className="col-span-2">
+                <span className="text-slate-500 block">شرط المتبرع:</span>
+                <strong>{selectedDonationForDetails.restrictedCategoryAr}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">القيمة الإجمالية:</span>
+                <strong className="font-mono text-slate-900">
+                  {selectedDonationForDetails.totalAmountEgp.toLocaleString("ar-EG")}{" "}
+                  ج.م
+                </strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">الرصيد المتاح للتخصيص:</span>
+                <strong className="font-mono text-emerald-800">
+                  {selectedDonationForDetails.availableAmountEgp.toLocaleString(
+                    "ar-EG"
+                  )}{" "}
+                  ج.م
+                </strong>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              {selectedDonationForDetails.status === "PENDING_VERIFICATION" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onConfirmDonation(selectedDonationForDetails.id);
+                    setSelectedDonationForDetails(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
+                >
+                  تأكيد استلام التبرع الآن
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDonationId(selectedDonationForDetails.id);
+                    setSelectedDonationForDetails(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold cursor-pointer"
+                >
+                  اختيار هذا الإيصال للتخصيص المالي
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedDonationForDetails(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tenant / Charity Full Details Modal */}
+      {showTenantDetailsModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowTenantDetailsModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-slate-200 max-w-xl w-full p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <span className="text-xs font-bold bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded">
+                  {currentTenant.type === "ASSOCIATION"
+                    ? "جمعية خيرية مشهرة"
+                    : "مبادرة فردية مستقلة"}
+                </span>
+                <h3 className="text-base font-bold text-slate-900 mt-1">
+                  {currentTenant.nameAr}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTenantDetailsModal(false)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div>
+                <span className="text-slate-500 block">المحافظة:</span>
+                <strong>{currentTenant.governorate}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">بيانات الإشهار / القيد:</span>
+                <strong>{currentTenant.registrationNumber || "مبادرة فردية"}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">عدد الحالات المسجلة:</span>
+                <strong>{scopedCases.length} حالة</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">عدد إيصالات التبرع:</span>
+                <strong>{scopedDonations.length} إيصال</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">إجمالي التبرعات المؤكدة:</span>
+                <strong className="font-mono text-slate-900">
+                  {currentTenant.confirmedDonationsEgp.toLocaleString("ar-EG")} ج.م
+                </strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">الرصيد المتاح للتخصيص:</span>
+                <strong className="font-mono text-emerald-800">
+                  {currentTenant.availableBalanceEgp.toLocaleString("ar-EG")} ج.م
+                </strong>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowTenantDetailsModal(false)}
+                className="px-4 py-2 rounded-xl bg-purple-700 text-white text-xs font-bold cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
