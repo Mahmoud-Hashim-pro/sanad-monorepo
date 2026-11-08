@@ -234,7 +234,7 @@ export function AuthNationalIdWorkspace({
           <div className="space-y-3 pt-2">
             <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-1.5">
               <div className="text-xs font-bold text-emerald-300">
-                ✓ تحقق криптоجرافي من الهوية والجلسة (HMAC-SHA256 & Scrypt)
+                ✓ تحقق مشفر من الهوية والجلسة (HMAC-SHA256 & Scrypt)
               </div>
               <p className="text-xs text-purple-100 leading-relaxed">
                 لا يُسمح بالوصول إلى أي بيانات أو عمليات قبل تسجيل الدخول وتوثيق الجلسة، وتُحدد الصلاحيات من السجل الرسمي للمستخدم في قاعدة البيانات.
