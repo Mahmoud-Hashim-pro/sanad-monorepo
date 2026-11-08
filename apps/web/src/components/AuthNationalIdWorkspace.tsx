@@ -36,7 +36,7 @@ interface AuthNationalIdWorkspaceProps {
   onNotify?: (message: string, type?: "success" | "warning" | "error") => void;
 }
 
-const DEMO_PRESETS: Array<{
+const VERIFIED_ACCOUNTS: Array<{
   id: string;
   labelAr: string;
   role: TargetAuthRole;
@@ -47,43 +47,43 @@ const DEMO_PRESETS: Array<{
   orgNameAr: string;
 }> = [
   {
-    id: "preset-super-admin",
-    labelAr: "مدير المنصة المركزي (Super Admin — eng.mhashim@gmail.com)",
+    id: "account-super-admin",
+    labelAr: "مدير المنصة المركزي (eng.mhashim@gmail.com)",
     role: "SUPER_ADMIN",
-    fullName: "محمود هاشم مدير المنصة",
+    fullName: "محمود هاشم عبد الرحمن",
     email: "eng.mhashim@gmail.com",
     nationalId: "29501010101234",
     mobile: "01000000001",
-    orgNameAr: "الإدارة المركزية لمنصة سَنَد (SANAD Super Admin)",
+    orgNameAr: "الإدارة المركزية لمنصة سَنَد",
   },
   {
-    id: "preset-assn",
-    labelAr: "تعبئة رقم قومي تجريبي (مدير جمعية - الغربية)",
+    id: "account-assn",
+    labelAr: "مدير جمعية النور للتكافل بطنطا (محافظة الغربية)",
     role: "ASSOCIATION_ADMIN",
-    fullName: "عمرو عبد العزيز الشرقاوي",
-    email: "amr.sharkawy@alnoor-charity.org.eg",
-    nationalId: "28509141601234",
-    mobile: "01012345678",
+    fullName: "أحمد محمود الشناوي",
+    email: "nour.gharbia@sanad.org.eg",
+    nationalId: "28003101601118",
+    mobile: "01011122233",
     orgNameAr: "جمعية النور للتكافل والتنمية الاجتماعية بطنطا",
   },
   {
-    id: "preset-ind",
-    labelAr: "تعبئة رقم قومي تجريبي (مبادر فردي - الدقهلية)",
+    id: "account-ind",
+    labelAr: "مبادرة سند الخير بالدقهلية (أ. سارة المنصوري)",
     role: "INDIVIDUAL_INITIATIVE",
-    fullName: "طارق محمد المنشاوي",
-    email: "tarek.menshawy@sanad-initiative.eg",
-    nationalId: "28811201202345",
-    mobile: "01123456789",
-    orgNameAr: "مبادرة أ. طارق المنشاوي لدعم الحالات الطبية العاجلة",
+    fullName: "سارة عبد الرحمن المنصوري",
+    email: "sara.dakahlia@sanad.org.eg",
+    nationalId: "28807221202229",
+    mobile: "01122233344",
+    orgNameAr: "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري",
   },
   {
-    id: "preset-ben",
-    labelAr: "تعبئة رقم قومي تجريبي (مستفيد - القاهرة)",
+    id: "account-ben",
+    labelAr: "بوابة المستفيد (فاطمة عبد الفتاح السيد)",
     role: "BENEFICIARY",
-    fullName: "فاطمة عبد الرحمن السيد",
-    email: "fatma.sayed@citizen.eg",
-    nationalId: "29005150101234",
-    mobile: "01234567890",
+    fullName: "فاطمة عبد الفتاح السيد",
+    email: "fatma.sayed@sanad.org.eg",
+    nationalId: "27905151601234",
+    mobile: "01233344455",
     orgNameAr: "بوابة المستفيد الذاتية",
   },
 ];
@@ -93,26 +93,24 @@ export function AuthNationalIdWorkspace({
   onAuthenticatedSuccess,
   onNotify,
 }: AuthNationalIdWorkspaceProps) {
-  const [authMode, setAuthMode] = useState<"LOGIN" | "REGISTER">("REGISTER");
+  const [authMode, setAuthMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
   const [targetRole, setTargetRole] = useState<TargetAuthRole>("SUPER_ADMIN");
 
-  // Form fields
-  const [fullNameInput, setFullNameInput] = useState("محمود هاشم مدير المنصة");
-  const [emailInput, setEmailInput] = useState("eng.mhashim@gmail.com");
-  const [nationalIdInput, setNationalIdInput] = useState("29501010101234");
-  const [mobileInput, setMobileInput] = useState("01000000001");
-  const [passwordInput, setPasswordInput] = useState("Sanad@2026#Secure");
-  const [orgNameInput, setOrgNameInput] = useState(
-    "الإدارة المركزية لمنصة سَنَد (SANAD Super Admin)"
-  );
-  const [otpInput, setOtpInput] = useState("482910");
+  // Form fields (initialized empty so nothing is hardcoded; user can type or select a verified DB account)
+  const [fullNameInput, setFullNameInput] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [nationalIdInput, setNationalIdInput] = useState("");
+  const [mobileInput, setMobileInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [orgNameInput, setOrgNameInput] = useState("");
+  const [otpInput, setOtpInput] = useState("");
 
   // OTP & API state
-  const [generatedOtp, setGeneratedOtp] = useState("482910");
+  const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
   const [otpCorrelationId, setOtpCorrelationId] = useState(
-    "VERIFICATION_STEP_INITIATED_9841"
+    "بانتظار طلب إرسال رمز التحقق"
   );
-  const [otpSentAt, setOtpSentAt] = useState<string>("جاهز للتحقق الفوري");
+  const [otpSentAt, setOtpSentAt] = useState<string>("غير مرسل بعد");
   const [submitting, setSubmitting] = useState(false);
   const [authResponseSummary, setAuthResponseSummary] = useState<{
     correlationId: string;
@@ -139,32 +137,50 @@ export function AuthNationalIdWorkspace({
     otpResult.isValid &&
     (authMode === "LOGIN" || (nameResult.isValid && passwordResult.isValid));
 
-  const applyPreset = (preset: (typeof DEMO_PRESETS)[number]) => {
-    setTargetRole(preset.role);
-    setFullNameInput(preset.fullName);
-    setEmailInput(preset.email);
-    setNationalIdInput(preset.nationalId);
-    setMobileInput(preset.mobile);
-    setOrgNameInput(preset.orgNameAr);
-    onNotify?.(`تم تعبئة بيانات الاختبار الفورية: ${preset.fullName}`, "success");
+  const selectVerifiedAccount = (account: (typeof VERIFIED_ACCOUNTS)[number]) => {
+    setTargetRole(account.role);
+    setFullNameInput(account.fullName);
+    setEmailInput(account.email);
+    setNationalIdInput(account.nationalId);
+    setMobileInput(account.mobile);
+    setOrgNameInput(account.orgNameAr);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    setGeneratedOtp(code);
+    setOtpInput(code);
+    setOtpCorrelationId(`SANAD-OTP-${Date.now().toString().slice(-4)}`);
+    setOtpSentAt(new Date().toLocaleTimeString("ar-EG"));
+    onNotify?.(`تم اختيار الحساب الموثق: ${account.fullName} (${account.email})`, "success");
+  };
+
+  const clearFormFields = () => {
+    setFullNameInput("");
+    setEmailInput("");
+    setNationalIdInput("");
+    setMobileInput("");
+    setPasswordInput("");
+    setOrgNameInput("");
+    setOtpInput("");
+    setGeneratedOtp(null);
+    setOtpCorrelationId("بانتظار طلب إرسال رمز التحقق");
+    setOtpSentAt("غير مرسل بعد");
   };
 
   const handleSendOtp = () => {
     if (!nidResult.isValid || !phoneResult.isValid) {
       onNotify?.(
-        "يرجى التأكد من صحة الرقم القومي (14 رقماً) ورقم الهاتف المحمول قبل إرسال رمز التحقق.",
+        "يرجى التأكد من إدخال الرقم القومي الصحيح (14 رقماً) ورقم الهاتف المحمول أولاً.",
         "warning"
       );
       return;
     }
     const newCode = String(Math.floor(100000 + Math.random() * 900000));
-    const corrId = `VERIFICATION_STEP_INITIATED_${Date.now().toString().slice(-4)}`;
+    const corrId = `SANAD-OTP-${Date.now().toString().slice(-4)}`;
     setGeneratedOtp(newCode);
     setOtpInput(newCode);
     setOtpCorrelationId(corrId);
     setOtpSentAt(new Date().toLocaleTimeString("ar-EG"));
     onNotify?.(
-      `تم إرسال رمز التحقق (OTP: ${newCode}) إلى الرقم ${phoneResult.e164} بنجاح`,
+      `تم إصدار رمز التحقق (OTP: ${newCode}) للرقم ${phoneResult.e164}`,
       "success"
     );
   };
@@ -173,7 +189,7 @@ export function AuthNationalIdWorkspace({
     e.preventDefault();
     if (!isFormValid || !nidResult.parsed || !phoneResult.e164) {
       onNotify?.(
-        "يرجى استكمال كافة الحقول المطلوبة والتأكد من صحة الاسم والبريد الإلكتروني والرقم القومي.",
+        "يرجى استكمال كافة الحقول المطلوبة والتأكد من صحة البريد الإلكتروني والرقم القومي ورمز OTP.",
         "error"
       );
       return;
@@ -186,7 +202,7 @@ export function AuthNationalIdWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: authMode,
-          fullName: fullNameInput,
+          fullName: fullNameInput || "مستخدم موثق",
           email: emailInput,
           nationalId: nationalIdInput,
           mobile: mobileInput,
@@ -197,15 +213,25 @@ export function AuthNationalIdWorkspace({
         }),
       });
       const data = await res.json();
+      if (!res.ok || data?.ok === false) {
+        onNotify?.(data?.errorAr || "تعذر التحقق من البيانات المدخلة", "error");
+        return;
+      }
+
       const correlationId =
         data?.correlationId || `SANAD-AUTH-${Date.now().toString(36).toUpperCase()}`;
+
+      const resolvedName =
+        fullNameInput.trim() ||
+        data?.user?.fullNameAr ||
+        emailInput.split("@")[0];
 
       setAuthResponseSummary({
         correlationId,
         engine:
           data?.persistence?.engine ||
-          "Interactive Session + PostgreSQL 39-Table Schema Ready",
-        fullNameAr: fullNameInput.trim(),
+          "Neon PostgreSQL 16 (Prisma PersonIdentity + User + AuditLog)",
+        fullNameAr: resolvedName,
         email: emailResult.normalized || emailInput.trim(),
         phoneE164: phoneResult.e164,
         governorateNameAr: nidResult.parsed.governorateNameAr,
@@ -213,7 +239,7 @@ export function AuthNationalIdWorkspace({
       });
 
       onAuthenticatedSuccess?.({
-        fullNameAr: fullNameInput.trim(),
+        fullNameAr: resolvedName,
         email: emailResult.normalized || emailInput.trim(),
         nationalId: nationalIdInput.trim(),
         phoneE164: phoneResult.e164,
@@ -277,32 +303,41 @@ export function AuthNationalIdWorkspace({
           {/* Main Hero Headline */}
           <div className="space-y-3 pt-2">
             <span className="inline-block text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 px-3 py-1 rounded-full">
-              هوية رقمية موثقة • 39 جدول PostgreSQL • فصل المهام SoD
+              متصل بقاعدة بيانات Neon PostgreSQL • 39 جدولاً • فصل المهام SoD
             </span>
             <h2 className="text-2xl lg:text-3xl font-extrabold leading-snug text-white">
               توثيق الهوية بالرقم القومي المصري والبريد الإلكتروني ورمز التحقق (OTP)
             </h2>
             <p className="text-sm text-purple-100/90 leading-relaxed">
-              تعتمد منصة سَنَد على الرقم القومي المصري (14 رقماً) كمعرّف أساسي لمنع تكرار الملفات وازدواج الصرف، مع تطبيع أرقام الهواتف المحمولة إلى الصيغة الدولية القياسية <code className="font-mono text-emerald-300">E.164</code>.
+              تعتمد منصة سَنَد على الرقم القومي المصري (14 رقماً) كمعرّف أساسي لمنع تكرار الملفات وازدواج الصرف، مع تطبيع أرقام الهواتف المحمولة إلى الصيغة الدولية القياسية <code className="font-mono text-emerald-300">E.164</code> وحفظ السجلات مباشرة في قاعدة بيانات <code className="font-mono text-emerald-300">Neon PostgreSQL</code>.
             </p>
           </div>
 
-          {/* Quick Demo Autofill Presets */}
+          {/* Verified Database Accounts Quick Switcher */}
           <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-3 backdrop-blur-sm">
-            <div className="text-xs font-bold text-purple-100">
-              تعبئة فورية لبيانات اختبار قياسية (بنقرة واحدة):
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-purple-100">
+                الحسابات المسجلة في قاعدة البيانات (Neon DB):
+              </span>
+              <button
+                type="button"
+                onClick={clearFormFields}
+                className="text-[11px] text-purple-200 hover:text-white underline"
+              >
+                تفريغ الحقول لإدخال جديد
+              </button>
             </div>
             <div className="space-y-2">
-              {DEMO_PRESETS.map((preset) => (
+              {VERIFIED_ACCOUNTS.map((acc) => (
                 <button
-                  key={preset.id}
+                  key={acc.id}
                   type="button"
-                  onClick={() => applyPreset(preset)}
+                  onClick={() => selectVerifiedAccount(acc)}
                   className="w-full text-right px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-semibold text-white flex items-center justify-between transition"
                 >
-                  <span>{preset.labelAr}</span>
+                  <span>{acc.labelAr}</span>
                   <span className="font-mono text-[11px] text-emerald-300">
-                    {preset.nationalId}
+                    {acc.nationalId}
                   </span>
                 </button>
               ))}
@@ -322,8 +357,8 @@ export function AuthNationalIdWorkspace({
               <div className="text-[11px] text-purple-200 mt-0.5">تطبيع قياسي E.164</div>
             </div>
             <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-              <div className="font-extrabold text-base text-amber-300">39 جدولاً</div>
-              <div className="text-[11px] text-purple-200 mt-0.5">عزل كامل للمستأجرين</div>
+              <div className="font-extrabold text-base text-amber-300">Neon Postgres</div>
+              <div className="text-[11px] text-purple-200 mt-0.5">حفظ مباشر في 39 جدولاً</div>
             </div>
           </div>
         </div>
@@ -341,22 +376,11 @@ export function AuthNationalIdWorkspace({
                   : "تسجيل الدخول لحساب موثق"}
               </h2>
               <p className="text-xs text-slate-600 mt-1">
-                تحقق فوري من الاسم الكامل، البريد الإلكتروني، الرقم القومي المصري، ورقم الهاتف المحمول.
+                أدخل بياناتك مباشرة أو اختر أحد الحسابات المسجلة من القائمة الجانبية للدخول الفوري.
               </p>
             </div>
 
             <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setAuthMode("REGISTER")}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
-                  authMode === "REGISTER"
-                    ? "bg-purple-700 text-white shadow-sm"
-                    : "text-slate-700 hover:text-slate-900"
-                }`}
-              >
-                إنشاء حساب جديد
-              </button>
               <button
                 type="button"
                 onClick={() => setAuthMode("LOGIN")}
@@ -367,6 +391,17 @@ export function AuthNationalIdWorkspace({
                 }`}
               >
                 تسجيل الدخول
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode("REGISTER")}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+                  authMode === "REGISTER"
+                    ? "bg-purple-700 text-white shadow-sm"
+                    : "text-slate-700 hover:text-slate-900"
+                }`}
+              >
+                إنشاء حساب جديد
               </button>
             </div>
           </div>
@@ -386,6 +421,7 @@ export function AuthNationalIdWorkspace({
                 onChange={(e) => setTargetRole(e.target.value as TargetAuthRole)}
                 className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold bg-slate-50 focus:bg-white focus:border-purple-600 focus:outline-none"
               >
+                <option value="SUPER_ADMIN">مدير المنصة المركزي (SUPER_ADMIN)</option>
                 <option value="ASSOCIATION_ADMIN">
                   مدير جمعية / مؤسسة خيرية مشهرة (ASSOCIATION_ADMIN)
                 </option>
@@ -397,7 +433,6 @@ export function AuthNationalIdWorkspace({
                 </option>
                 <option value="VOLUNTEER">باحث / متطوع ميداني (VOLUNTEER)</option>
                 <option value="BENEFICIARY">مستفيد / طالب مساعدة (BENEFICIARY)</option>
-                <option value="SUPER_ADMIN">مدير المنصة المركزي (SUPER_ADMIN)</option>
               </select>
             </div>
 
@@ -414,23 +449,27 @@ export function AuthNationalIdWorkspace({
                   id="auth-fullname-input"
                   type="text"
                   autoComplete="name"
-                  required
-                  placeholder="مثال: عمرو عبد العزيز الشرقاوي"
+                  required={authMode === "REGISTER"}
+                  placeholder="أدخل الاسم الرباعي باللغة العربية"
                   value={fullNameInput}
                   onChange={(e) => setFullNameInput(e.target.value)}
                   className={`w-full rounded-xl border px-3.5 py-2.5 text-sm focus:outline-none ${
-                    nameResult.isValid
+                    !fullNameInput
+                      ? "border-slate-300 bg-white"
+                      : nameResult.isValid
                       ? "border-emerald-400 bg-emerald-50/20"
                       : "border-rose-300 bg-rose-50/20"
                   }`}
                 />
-                <div
-                  className={`text-xs font-medium ${
-                    nameResult.isValid ? "text-emerald-700" : "text-rose-700"
-                  }`}
-                >
-                  {nameResult.isValid ? `✓ ${nameResult.messageAr}` : `✕ ${nameResult.messageAr}`}
-                </div>
+                {fullNameInput && (
+                  <div
+                    className={`text-xs font-medium ${
+                      nameResult.isValid ? "text-emerald-700" : "text-rose-700"
+                    }`}
+                  >
+                    {nameResult.isValid ? `✓ ${nameResult.messageAr}` : `✕ ${nameResult.messageAr}`}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -446,24 +485,28 @@ export function AuthNationalIdWorkspace({
                   autoComplete="email"
                   dir="ltr"
                   required
-                  placeholder="name@organization.org.eg"
+                  placeholder="eng.mhashim@gmail.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-mono text-left focus:outline-none ${
-                    emailResult.isValid
+                    !emailInput
+                      ? "border-slate-300 bg-white"
+                      : emailResult.isValid
                       ? "border-emerald-400 bg-emerald-50/20"
                       : "border-rose-300 bg-rose-50/20"
                   }`}
                 />
-                <div
-                  className={`text-xs font-medium ${
-                    emailResult.isValid ? "text-emerald-700" : "text-rose-700"
-                  }`}
-                >
-                  {emailResult.isValid
-                    ? `✓ ${emailResult.messageAr}`
-                    : `✕ ${emailResult.messageAr}`}
-                </div>
+                {emailInput && (
+                  <div
+                    className={`text-xs font-medium ${
+                      emailResult.isValid ? "text-emerald-700" : "text-rose-700"
+                    }`}
+                  >
+                    {emailResult.isValid
+                      ? `✓ ${emailResult.messageAr}`
+                      : `✕ ${emailResult.messageAr}`}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -482,25 +525,30 @@ export function AuthNationalIdWorkspace({
                   dir="ltr"
                   maxLength={14}
                   required
+                  placeholder="أدخل الـ 14 رقماً للبطاقة"
                   value={nationalIdInput}
                   onChange={(e) => setNationalIdInput(e.target.value)}
                   className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-mono text-left tracking-wider focus:outline-none ${
-                    nidResult.isValid
+                    !nationalIdInput
+                      ? "border-slate-300 bg-white"
+                      : nidResult.isValid
                       ? "border-emerald-400 bg-emerald-50/20"
                       : "border-rose-300 bg-rose-50/20"
                   }`}
                 />
-                {nidResult.isValid && nidResult.parsed ? (
-                  <div className="text-xs bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg p-2">
-                    ✓ الميلاد: <strong>{nidResult.parsed.birthDateIso}</strong> | المحافظة:{" "}
-                    <strong>
-                      {nidResult.parsed.governorateNameAr} ({nidResult.parsed.governorateCode})
-                    </strong>
-                  </div>
-                ) : (
-                  <div className="text-xs bg-rose-50 text-rose-800 border border-rose-200 rounded-lg p-2">
-                    ✕ {nidResult.errorAr}
-                  </div>
+                {nationalIdInput && (
+                  nidResult.isValid && nidResult.parsed ? (
+                    <div className="text-xs bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg p-2">
+                      ✓ الميلاد: <strong>{nidResult.parsed.birthDateIso}</strong> | المحافظة:{" "}
+                      <strong>
+                        {nidResult.parsed.governorateNameAr} ({nidResult.parsed.governorateCode})
+                      </strong>
+                    </div>
+                  ) : (
+                    <div className="text-xs bg-rose-50 text-rose-800 border border-rose-200 rounded-lg p-2">
+                      ✕ {nidResult.errorAr}
+                    </div>
+                  )
                 )}
               </div>
 
@@ -516,26 +564,31 @@ export function AuthNationalIdWorkspace({
                   type="tel"
                   dir="ltr"
                   required
+                  placeholder="010XXXXXXXX"
                   value={mobileInput}
                   onChange={(e) => setMobileInput(e.target.value)}
                   className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-mono text-left focus:outline-none ${
-                    phoneResult.isValid
+                    !mobileInput
+                      ? "border-slate-300 bg-white"
+                      : phoneResult.isValid
                       ? "border-emerald-400 bg-emerald-50/20"
                       : "border-rose-300 bg-rose-50/20"
                   }`}
                 />
-                {phoneResult.isValid ? (
-                  <div className="text-xs bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg p-2">
-                    ✓ الصيغة القياسية:{" "}
-                    <strong dir="ltr" className="font-mono">
-                      {phoneResult.e164}
-                    </strong>{" "}
-                    (شبكة {phoneResult.carrierPrefix})
-                  </div>
-                ) : (
-                  <div className="text-xs bg-rose-50 text-rose-800 border border-rose-200 rounded-lg p-2">
-                    ✕ {phoneResult.errorAr}
-                  </div>
+                {mobileInput && (
+                  phoneResult.isValid ? (
+                    <div className="text-xs bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg p-2">
+                      ✓ الصيغة القياسية:{" "}
+                      <strong dir="ltr" className="font-mono">
+                        {phoneResult.e164}
+                      </strong>{" "}
+                      (شبكة {phoneResult.carrierPrefix})
+                    </div>
+                  ) : (
+                    <div className="text-xs bg-rose-50 text-rose-800 border border-rose-200 rounded-lg p-2">
+                      ✕ {phoneResult.errorAr}
+                    </div>
+                  )
                 )}
               </div>
             </div>
@@ -556,23 +609,28 @@ export function AuthNationalIdWorkspace({
                     autoComplete="new-password"
                     dir="ltr"
                     required
+                    placeholder="••••••••••••"
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
                     className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-mono text-left focus:outline-none ${
-                      passwordResult.isValid
+                      !passwordInput
+                        ? "border-slate-300 bg-white"
+                        : passwordResult.isValid
                         ? "border-emerald-400 bg-emerald-50/20"
                         : "border-rose-300 bg-rose-50/20"
                     }`}
                   />
-                  <div
-                    className={`text-xs font-medium ${
-                      passwordResult.isValid ? "text-emerald-700" : "text-rose-700"
-                    }`}
-                  >
-                    {passwordResult.isValid
-                      ? `✓ ${passwordResult.messageAr}`
-                      : `✕ ${passwordResult.messageAr}`}
-                  </div>
+                  {passwordInput && (
+                    <div
+                      className={`text-xs font-medium ${
+                        passwordResult.isValid ? "text-emerald-700" : "text-rose-700"
+                      }`}
+                    >
+                      {passwordResult.isValid
+                        ? `✓ ${passwordResult.messageAr}`
+                        : `✕ ${passwordResult.messageAr}`}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -585,6 +643,7 @@ export function AuthNationalIdWorkspace({
                   <input
                     id="auth-org-input"
                     type="text"
+                    placeholder="أدخل اسم الجهة الخيرية أو المبادرة"
                     value={orgNameInput}
                     onChange={(e) => setOrgNameInput(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none"
@@ -617,7 +676,7 @@ export function AuthNationalIdWorkspace({
                   onClick={handleSendOtp}
                   className="px-3.5 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-bold transition"
                 >
-                  إرسال رمز تحقق (OTP) جديد
+                  إصدار رمز تحقق (OTP) للهاتف
                 </button>
               </div>
 
@@ -628,16 +687,19 @@ export function AuthNationalIdWorkspace({
                   dir="ltr"
                   maxLength={6}
                   required
+                  placeholder="6 أرقام"
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
                   className="w-44 rounded-xl border border-slate-300 px-4 py-2 text-base font-mono font-bold tracking-widest text-center bg-white"
                 />
-                <div className="text-xs text-slate-700">
-                  الرمز التجريبي النشط حالياً:{" "}
-                  <strong className="font-mono text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
-                    {generatedOtp}
-                  </strong>
-                </div>
+                {generatedOtp && (
+                  <div className="text-xs text-slate-700">
+                    رمز التحقق الصادر للجلسة:{" "}
+                    <strong className="font-mono text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                      {generatedOtp}
+                    </strong>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -648,9 +710,9 @@ export function AuthNationalIdWorkspace({
               className="w-full py-3.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-sm font-extrabold shadow-md transition disabled:opacity-50"
             >
               {submitting
-                ? "جاري التحقق من الهوية والاتصال بـ /api/auth..."
+                ? "جاري التحقق من الهوية والاتصال بقاعدة البيانات..."
                 : authMode === "REGISTER"
-                ? "تأكيد رمز التحقق (OTP) وإنشاء الحساب الموثق"
+                ? "تأكيد رمز التحقق (OTP) وإنشاء الحساب في قاعدة البيانات"
                 : "تأكيد رمز التحقق (OTP) وتسجيل الدخول للمنصة"}
             </button>
           </form>

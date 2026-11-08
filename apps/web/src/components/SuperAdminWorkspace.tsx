@@ -40,8 +40,8 @@ export function SuperAdminWorkspace({
   // Add tenant form states
   const [newTenantName, setNewTenantName] = useState("");
   const [newTenantType, setNewTenantType] = useState<"ASSOCIATION" | "INDIVIDUAL">("ASSOCIATION");
-  const [newTenantGov, setNewTenantGov] = useState("القاهرة");
-  const [newTenantRegNo, setNewTenantRegNo] = useState("مشهـرة برقم 6120 لسنة 2024 - القاهرة");
+  const [newTenantGov, setNewTenantGov] = useState("");
+  const [newTenantRegNo, setNewTenantRegNo] = useState("");
 
   const filteredTenants = tenants.filter((t) =>
     tenantFilter === "ALL" ? true : t.status === tenantFilter

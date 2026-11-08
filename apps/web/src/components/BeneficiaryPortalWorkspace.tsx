@@ -38,9 +38,7 @@ export function BeneficiaryPortalWorkspace({
   );
   const [category, setCategory] = useState<AidCategoryCode>("MONTHLY_FOOD");
   const [requestedEgp, setRequestedEgp] = useState<number>(3500);
-  const [notesAr, setNotesAr] = useState<string>(
-    "أرغب في التقدم بطلب دعم للأسرة وإرفاق صورة بطاقة الرقم القومي وشهادات قيد الأبناء."
-  );
+  const [notesAr, setNotesAr] = useState<string>("");
 
   const [selectedReceiptDelivery, setSelectedReceiptDelivery] =
     useState<MockDelivery | null>(null);

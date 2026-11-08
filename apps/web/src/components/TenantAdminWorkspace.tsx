@@ -69,8 +69,8 @@ export function TenantAdminWorkspace({
 
   // New Case Form
   const [beneficiaryName, setBeneficiaryName] = useState("");
-  const [nationalId, setNationalId] = useState("28904151602345");
-  const [mobile, setMobile] = useState("01023456789");
+  const [nationalId, setNationalId] = useState("");
+  const [mobile, setMobile] = useState("");
   const [targetType, setTargetType] = useState<"HOUSEHOLD" | "PERSON">(
     mode === "INDIVIDUAL" ? "PERSON" : "HOUSEHOLD"
   );
@@ -521,35 +521,29 @@ export function TenantAdminWorkspace({
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor="new-case-nid" className="block text-xs font-bold text-slate-700">
-                  الرقم القومي المصري (14 رقماً)
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setNationalId("28708201601982")}
-                  className="text-xs text-purple-700 hover:underline font-semibold"
-                >
-                  تعبئة رقم قومي تجريبي صالح
-                </button>
-              </div>
+              <label htmlFor="new-case-nid" className="block text-xs font-bold text-slate-700">
+                الرقم القومي المصري (14 رقماً)
+              </label>
               <input
                 id="new-case-nid"
                 type="text"
                 maxLength={14}
                 required
+                placeholder="أدخل الـ 14 رقماً للبطاقة"
                 value={nationalId}
                 onChange={(e) => setNationalId(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm font-mono"
               />
-              {nidCheck.isValid && nidCheck.parsed ? (
-                <div className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg p-2">
-                  الرقم القومي صحيح — تاريخ الميلاد: <strong>{nidCheck.parsed.birthDateIso}</strong> | المحافظة: <strong>{nidCheck.parsed.governorateNameAr}</strong>
-                </div>
-              ) : (
-                <div className="text-xs bg-rose-50 text-rose-800 border border-rose-200 rounded-lg p-2">
-                  {nidCheck.errorAr}
-                </div>
+              {nationalId && (
+                nidCheck.isValid && nidCheck.parsed ? (
+                  <div className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg p-2">
+                    الرقم القومي صحيح — تاريخ الميلاد: <strong>{nidCheck.parsed.birthDateIso}</strong> | المحافظة: <strong>{nidCheck.parsed.governorateNameAr}</strong>
+                  </div>
+                ) : (
+                  <div className="text-xs bg-rose-50 text-rose-800 border border-rose-200 rounded-lg p-2">
+                    {nidCheck.errorAr}
+                  </div>
+                )
               )}
             </div>
 
@@ -562,16 +556,19 @@ export function TenantAdminWorkspace({
                   id="new-case-mobile"
                   type="text"
                   required
+                  placeholder="010XXXXXXXX"
                   value={mobile}
                   onChange={(e) => setMobile(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm font-mono"
                 />
-                {phoneCheck.isValid ? (
-                  <div className="text-xs text-emerald-700 font-mono">
-                    E.164: {phoneCheck.e164}
-                  </div>
-                ) : (
-                  <div className="text-xs text-rose-700">{phoneCheck.errorAr}</div>
+                {mobile && (
+                  phoneCheck.isValid ? (
+                    <div className="text-xs text-emerald-700 font-mono">
+                      E.164: {phoneCheck.e164}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-rose-700">{phoneCheck.errorAr}</div>
+                  )
                 )}
               </div>
 

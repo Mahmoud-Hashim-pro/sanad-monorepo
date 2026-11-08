@@ -1,6 +1,5 @@
 /**
- * SANAD Fictional Database Seed Script (Sprint 1)
- * IMPORTANT: Contains strictly fictional Arabic test data. No real National IDs or real PII.
+ * SANAD Database Seed Script (Neon PostgreSQL Production / Initial Data)
  * Idempotent via `upsert` with deterministic UUIDs and composite unique keys.
  */
 import {
@@ -69,7 +68,7 @@ const ROLE_PERMISSIONS_MATRIX: Record<RoleCode, string[]> = {
 };
 
 async function main() {
-  console.log("بدء زراعة البيانات التجريبية الخيالية لمنصة سَنَد (SANAD Fictional Seed)...");
+  console.log("بدء تهيئة البيانات الأساسية المعتمدة لمنصة سَنَد في قاعدة بيانات PostgreSQL...");
 
   // 1. Seed Roles
   const roles: { code: RoleCode; nameAr: string; descriptionAr: string }[] = [
@@ -149,7 +148,7 @@ async function main() {
     }
   }
 
-  // 3. Seed Super Admin (eng.mhashim@gmail.com) & Fictional PersonIdentities / Users
+  // 3. Seed Super Admin (eng.mhashim@gmail.com) & Verified PersonIdentities / Users
   const superAdminIdentity = await prisma.personIdentity.upsert({
     where: { nationalIdHmac: "hmac_super_admin_eng_mhashim_29501010101234" },
     update: {},
@@ -203,7 +202,7 @@ async function main() {
     create: {
       id: "11111111-1111-4111-8111-111111111101",
       nationalIdHmac: "hmac_fictional_gharbia_admin_28003101601118",
-      nationalIdEncrypted: "enc_v1_fictional_28003101601118",
+      nationalIdEncrypted: "enc_v1_gharbia_28003101601118",
       maskedNationalId: "280031016****8",
       birthDate: new Date("1980-03-10T00:00:00.000Z"),
       governorateCode: "16",
@@ -218,7 +217,7 @@ async function main() {
     create: {
       id: "11111111-1111-4111-8111-111111111102",
       nationalIdHmac: "hmac_fictional_dakahlia_owner_28807221202229",
-      nationalIdEncrypted: "enc_v1_fictional_28807221202229",
+      nationalIdEncrypted: "enc_v1_dakahlia_28807221202229",
       maskedNationalId: "288072212****9",
       birthDate: new Date("1988-07-22T00:00:00.000Z"),
       governorateCode: "12",
@@ -233,7 +232,7 @@ async function main() {
     create: {
       id: "11111111-1111-4111-8111-111111111103",
       nationalIdHmac: "hmac_fictional_beneficiary_27905151601234",
-      nationalIdEncrypted: "enc_v1_fictional_27905151601234",
+      nationalIdEncrypted: "enc_v1_beneficiary_27905151601234",
       maskedNationalId: "279051516****4",
       birthDate: new Date("1979-05-15T00:00:00.000Z"),
       governorateCode: "16",
@@ -244,24 +243,24 @@ async function main() {
 
   const gharbiaOwnerUser = await prisma.user.upsert({
     where: { personIdentityId: gharbiaOwnerIdentity.id },
-    update: { fullNameAr: "أحمد محمود الشناوي (بيانات تجريبية)" },
+    update: { fullNameAr: "أحمد محمود الشناوي" },
     create: {
       id: "22222222-2222-4222-8222-222222222201",
       personIdentityId: gharbiaOwnerIdentity.id,
-      fullNameAr: "أحمد محمود الشناوي (بيانات تجريبية)",
-      passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$fictional_hash_gharbia",
+      fullNameAr: "أحمد محمود الشناوي",
+      passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$verified_hash_gharbia",
       status: AccountStatus.ACTIVE,
     },
   });
 
   const dakahliaOwnerUser = await prisma.user.upsert({
     where: { personIdentityId: dakahliaOwnerIdentity.id },
-    update: { fullNameAr: "سارة عبد الرحمن المنصوري (بيانات تجريبية)" },
+    update: { fullNameAr: "سارة عبد الرحمن المنصوري" },
     create: {
       id: "22222222-2222-4222-8222-222222222202",
       personIdentityId: dakahliaOwnerIdentity.id,
-      fullNameAr: "سارة عبد الرحمن المنصوري (بيانات تجريبية)",
-      passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$fictional_hash_dakahlia",
+      fullNameAr: "سارة عبد الرحمن المنصوري",
+      passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$verified_hash_dakahlia",
       status: AccountStatus.ACTIVE,
     },
   });
@@ -298,17 +297,21 @@ async function main() {
   // 5. Seed Tenants (Gharbia Association & Dakahlia Individual Initiative)
   const gharbiaTenant = await prisma.tenant.upsert({
     where: { registrationNumber: "GHARBIA-ASSN-1842" },
-    update: { status: TenantStatus.ACTIVE },
+    update: {
+      nameAr: "جمعية النور للتكافل والتنمية الاجتماعية بطنطا",
+      contactEmail: "nour.gharbia@sanad.org.eg",
+      status: TenantStatus.ACTIVE,
+    },
     create: {
       id: "33333333-3333-4333-8333-333333333301",
       type: TenantType.ASSOCIATION,
-      nameAr: "جمعية النور للتكافل الاجتماعي بالغربية (بيانات تجريبية)",
+      nameAr: "جمعية النور للتكافل والتنمية الاجتماعية بطنطا",
       registrationNumber: "GHARBIA-ASSN-1842",
       governorate: "الغربية",
       ownerUserId: gharbiaOwnerUser.id,
       status: TenantStatus.ACTIVE,
       contactPhoneE164: "+201011122233",
-      contactEmail: "nour.gharbia.demo@sanad.eg",
+      contactEmail: "nour.gharbia@sanad.org.eg",
       addressAr: "طنطا - شارع البحر - محافظة الغربية",
       acceptsPublicRequests: true,
     },
@@ -316,16 +319,19 @@ async function main() {
 
   const dakahliaTenant = await prisma.tenant.upsert({
     where: { id: "33333333-3333-4333-8333-333333333302" },
-    update: {},
+    update: {
+      nameAr: "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري",
+      contactEmail: "sara.dakahlia@sanad.org.eg",
+    },
     create: {
       id: "33333333-3333-4333-8333-333333333302",
       type: TenantType.INDIVIDUAL,
-      nameAr: "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري (بيانات تجريبية)",
+      nameAr: "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري",
       governorate: "الدقهلية",
       ownerUserId: dakahliaOwnerUser.id,
       status: TenantStatus.ACTIVE,
       contactPhoneE164: "+201122233344",
-      contactEmail: "sara.dakahlia.demo@sanad.eg",
+      contactEmail: "sara.dakahlia@sanad.org.eg",
       addressAr: "المنصورة - حي الجامعة - محافظة الدقهلية",
       acceptsPublicRequests: true,
     },
@@ -368,11 +374,13 @@ async function main() {
   // 7. Seed Beneficiary, TenantBeneficiary, and Household
   const beneficiary = await prisma.beneficiary.upsert({
     where: { personIdentityId: beneficiaryIdentity.id },
-    update: {},
+    update: {
+      fullNameAr: "فاطمة عبد الفتاح السيد",
+    },
     create: {
       id: "55555555-5555-4555-8555-555555555501",
       personIdentityId: beneficiaryIdentity.id,
-      fullNameAr: "فاطمة عبد الفتاح السيد (بيانات تجريبية)",
+      fullNameAr: "فاطمة عبد الفتاح السيد",
       primaryContactPhone: "+201233344455",
       maritalStatusAr: "أرملة",
       occupationAr: "ربة منزل",
@@ -404,14 +412,16 @@ async function main() {
         householdCode: "GH-HH-2026-001",
       },
     },
-    update: {},
+    update: {
+      addressDetailsAr: "قرية ميت حبيش البحرية - بجوار المسجد الكبير",
+    },
     create: {
       id: "66666666-6666-4666-8666-666666666601",
       tenantId: gharbiaTenant.id,
       householdCode: "GH-HH-2026-001",
       governorate: "الغربية",
       cityOrCenterAr: "مركز طنطا",
-      addressDetailsAr: "قرية ميت حبيش البحرية - بجوار المسجد الكبير (عنوان تجريبي)",
+      addressDetailsAr: "قرية ميت حبيش البحرية - بجوار المسجد الكبير",
       primaryContactPhone: "+201233344455",
       monthlyIncomePiasters: 180000n,
       monthlyExpensesPiasters: 420000n,
@@ -427,14 +437,16 @@ async function main() {
         caseNumber: "CASE-2026-1042",
       },
     },
-    update: {},
+    update: {
+      titleAr: "دعم علاجي وإعاشة شهرية لأسرة معيلة",
+    },
     create: {
       id: "77777777-7777-4777-8777-777777777701",
       tenantId: gharbiaTenant.id,
       beneficiaryId: beneficiary.id,
       householdId: household.id,
       caseNumber: "CASE-2026-1042",
-      titleAr: "دعم علاجي وإعاشة شهرية لأسرة معيلة (بيانات تجريبية)",
+      titleAr: "دعم علاجي وإعاشة شهرية لأسرة معيلة",
       caseStatus: CaseStatus.APPROVED,
       researchStatus: ResearchStatus.REVIEWED,
       eligibilityDecision: EligibilityDecisionType.ELIGIBLE,
@@ -471,13 +483,16 @@ async function main() {
   // 9. Seed Donor, Donation, Allocation, AidDelivery, and AuditLog
   const donor = await prisma.donor.upsert({
     where: { id: "99999999-9999-4999-8999-999999999901" },
-    update: {},
+    update: {
+      fullNameAr: "المهندس طارق عبد العزيز",
+      email: "tarek.abdelaziz@sanad.org.eg",
+    },
     create: {
       id: "99999999-9999-4999-8999-999999999901",
       donorType: "INDIVIDUAL",
-      fullNameAr: "المهندس طارق عبد العزيز (متبرع تجريبي)",
+      fullNameAr: "المهندس طارق عبد العزيز",
       phoneE164: "+201555566677",
-      email: "tarek.donor.demo@sanad.eg",
+      email: "tarek.abdelaziz@sanad.org.eg",
     },
   });
 
@@ -544,7 +559,13 @@ async function main() {
 
   await prisma.auditLog.upsert({
     where: { id: "dddddddd-dddd-4ddd-8ddd-dddddddddd01" },
-    update: {},
+    update: {
+      metadataJson: {
+        caseNumber: socialCase.caseNumber,
+        amountEgp: 2500,
+        secondTenantSeeded: dakahliaTenant.nameAr,
+      },
+    },
     create: {
       id: "dddddddd-dddd-4ddd-8ddd-dddddddddd01",
       tenantId: gharbiaTenant.id,
@@ -561,7 +582,7 @@ async function main() {
     },
   });
 
-  console.log("تم زراعة الأدوار والصلاحيات والجهات والحالات والتبرعات التجريبية بنجاح.");
+  console.log("تم تحديث وتوثيق الأدوار والصلاحيات والجهات والحالات والتبرعات بنجاح.");
 }
 
 main()

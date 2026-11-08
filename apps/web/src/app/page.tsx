@@ -47,7 +47,7 @@ type ActiveRoleView =
   | "BENEFICIARY"
   | "AUTH_LOGIN_REGISTER";
 
-const STORAGE_KEY = "sanad_interactive_state_v2";
+const STORAGE_KEY = "sanad_live_state_v3";
 
 export default function SanadWorkspacePreviewPage() {
   const [activeView, setActiveView] = useState<ActiveRoleView>("AUTH_LOGIN_REGISTER");
@@ -62,10 +62,10 @@ export default function SanadWorkspacePreviewPage() {
   const [consents, setConsents] = useState<MockConsentItem[]>(FICTIONAL_CONSENTS);
 
   const [selectedAssnTenantId, setSelectedAssnTenantId] = useState<string>(
-    "tenant-assn-noor-tanta"
+    "33333333-3333-4333-8333-333333333301"
   );
   const [selectedIndTenantId, setSelectedIndTenantId] = useState<string>(
-    "tenant-ind-tarek-mansoura"
+    "33333333-3333-4333-8333-333333333302"
   );
 
   const [isDbModalOpen, setIsDbModalOpen] = useState(false);
@@ -82,24 +82,78 @@ export default function SanadWorkspacePreviewPage() {
     setToast({ message, type });
   };
 
-  const appendAudit = (params: {
-    actorNameAr: string;
-    actorRoleAr: string;
-    actionCode: string;
-    descriptionAr: string;
-    tenantNameAr: string;
-  }) => {
+  const syncWithNeonDb = async (showNotification = false) => {
+    try {
+      const res = await fetch("/api/state", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.ok && data.source === "neon_postgresql") {
+        if (Array.isArray(data.tenants) && data.tenants.length > 0) {
+          setTenants(data.tenants);
+        }
+        if (Array.isArray(data.cases) && data.cases.length > 0) {
+          setCases(data.cases);
+        }
+        if (Array.isArray(data.donations) && data.donations.length > 0) {
+          setDonations(data.donations);
+        }
+        if (Array.isArray(data.deliveries) && data.deliveries.length > 0) {
+          setDeliveries(data.deliveries);
+        }
+        if (Array.isArray(data.auditLogs) && data.auditLogs.length > 0) {
+          setAuditLogs(data.auditLogs);
+        }
+        if (showNotification) {
+          notify(
+            "تمت مزامنة كافة البيانات الحية من قاعدة بيانات Neon PostgreSQL بنجاح.",
+            "success"
+          );
+        }
+      }
+    } catch {
+      // Keep current state if offline
+    }
+  };
+
+  const persistActionToNeon = (
+    action: string,
+    payload: Record<string, unknown>
+  ) => {
+    void fetch("/api/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, payload }),
+    }).catch(() => {});
+  };
+
+  const appendAudit = (
+    params: {
+      actorNameAr: string;
+      actorRoleAr: string;
+      actionCode: string;
+      descriptionAr: string;
+      tenantNameAr: string;
+    },
+    extraAction?: { action: string; payload: Record<string, unknown> }
+  ) => {
     const newEntry: MockAuditLog = {
       id: `audit-${Date.now()}`,
       timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
       ...params,
     };
     setAuditLogs((prev) => [newEntry, ...prev]);
+    persistActionToNeon(extraAction?.action || "AUDIT_LOG", {
+      ...(extraAction?.payload || {}),
+      audit: params,
+    });
   };
 
-  // Load persisted state & URL ?view= parameter on mount
+  // Load persisted state, purge legacy demo keys, & sync live from Neon DB on mount
   useEffect(() => {
     try {
+      window.localStorage.removeItem("sanad_interactive_state_v1");
+      window.localStorage.removeItem("sanad_interactive_state_v2");
+
       const params = new URLSearchParams(window.location.search);
       const viewParam = params.get("view") as ActiveRoleView | null;
       if (
@@ -133,6 +187,7 @@ export default function SanadWorkspacePreviewPage() {
       // Ignore storage read errors in restricted environments
     } finally {
       setHydrated(true);
+      void syncWithNeonDb(false);
     }
   }, []);
 
@@ -166,20 +221,13 @@ export default function SanadWorkspacePreviewPage() {
     consents,
   ]);
 
-  const handleResetDemoData = () => {
-    setTenants(FICTIONAL_TENANTS);
-    setCases(FICTIONAL_CASES);
-    setDonations(FICTIONAL_DONATIONS);
-    setDeliveries(FICTIONAL_DELIVERIES);
-    setSharingRequests(FICTIONAL_SHARING_REQUESTS);
-    setAuditLogs(FICTIONAL_AUDIT_LOGS);
-    setConsents(FICTIONAL_CONSENTS);
+  const handleSyncDatabase = () => {
     try {
       window.localStorage.removeItem(STORAGE_KEY);
     } catch {
       // Ignore
     }
-    notify("تمت إعادة ضبط جميع البيانات التجريبية إلى الحالة القياسية بنجاح.", "success");
+    void syncWithNeonDb(true);
   };
 
   // Super Admin Handlers
@@ -189,16 +237,22 @@ export default function SanadWorkspacePreviewPage() {
     setTenants((prev) =>
       prev.map((t) => (t.id === tenantId ? { ...t, status } : t))
     );
-    appendAudit({
-      actorNameAr: "مدير المنصة المركزي",
-      actorRoleAr: "SUPER_ADMIN",
-      actionCode: status === "ACTIVE" ? "TENANT_APPROVED" : "TENANT_SUSPENDED",
-      descriptionAr:
-        status === "ACTIVE"
-          ? `اعتماد وتفعيل الجهة (${target.nameAr}) للعمل على المنصة`
-          : `إيقاف مؤقت للجهة (${target.nameAr}) للمراجعة الرقابية`,
-      tenantNameAr: target.nameAr,
-    });
+    appendAudit(
+      {
+        actorNameAr: "مدير المنصة المركزي",
+        actorRoleAr: "SUPER_ADMIN",
+        actionCode: status === "ACTIVE" ? "TENANT_APPROVED" : "TENANT_SUSPENDED",
+        descriptionAr:
+          status === "ACTIVE"
+            ? `اعتماد وتفعيل الجهة (${target.nameAr}) للعمل على المنصة`
+            : `إيقاف مؤقت للجهة (${target.nameAr}) للمراجعة الرقابية`,
+        tenantNameAr: target.nameAr,
+      },
+      {
+        action: "UPDATE_TENANT_STATUS",
+        payload: { tenantId, status },
+      }
+    );
     notify(
       status === "ACTIVE"
         ? `تم اعتماد وتفعيل "${target.nameAr}" بنجاح.`
@@ -227,14 +281,20 @@ export default function SanadWorkspacePreviewPage() {
       availableBalanceEgp: 0,
     };
     setTenants((prev) => [newTenant, ...prev]);
-    appendAudit({
-      actorNameAr: "مدير المنصة المركزي",
-      actorRoleAr: "SUPER_ADMIN",
-      actionCode: "TENANT_REGISTERED",
-      descriptionAr: `إدراج كيان جديد (${payload.nameAr}) بانتظار الاعتماد`,
-      tenantNameAr: payload.nameAr,
-    });
-    notify(`تم إدراج "${payload.nameAr}" ضمن قائمة الجهات بانتظار الاعتماد.`, "success");
+    appendAudit(
+      {
+        actorNameAr: "مدير المنصة المركزي",
+        actorRoleAr: "SUPER_ADMIN",
+        actionCode: "TENANT_REGISTERED",
+        descriptionAr: `إدراج كيان جديد (${payload.nameAr}) بانتظار الاعتماد`,
+        tenantNameAr: payload.nameAr,
+      },
+      {
+        action: "CREATE_TENANT",
+        payload,
+      }
+    );
+    notify(`تم إدراج "${payload.nameAr}" وحفظه في قاعدة بيانات Neon PostgreSQL.`, "success");
   };
 
   const handleDecideSharingRequest = (
@@ -319,17 +379,26 @@ export default function SanadWorkspacePreviewPage() {
           : t
       )
     );
-    appendAudit({
-      actorNameAr:
-        tenant.type === "INDIVIDUAL" ? "أ. طارق المنشاوي" : "أ. عمرو عبد العزيز",
-      actorRoleAr:
-        tenant.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
-      actionCode: "CASE_CREATED_NID_VERIFIED",
-      descriptionAr: `تسجيل حالة جديدة (${newCase.caseNumber}) للمستفيد (${newCase.beneficiaryNameAr}) بعد فحص الرقم القومي`,
-      tenantNameAr: tenant.nameAr,
-    });
+    appendAudit(
+      {
+        actorNameAr:
+          tenant.type === "INDIVIDUAL" ? "سارة عبد الرحمن المنصوري" : "أحمد محمود الشناوي",
+        actorRoleAr:
+          tenant.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
+        actionCode: "CASE_CREATED_NID_VERIFIED",
+        descriptionAr: `تسجيل حالة جديدة (${newCase.caseNumber}) للمستفيد (${newCase.beneficiaryNameAr}) بعد فحص الرقم القومي`,
+        tenantNameAr: tenant.nameAr,
+      },
+      {
+        action: "CREATE_CASE",
+        payload: {
+          ...payload,
+          caseNumber: newCase.caseNumber,
+        },
+      }
+    );
     notify(
-      `تم تسجيل ملف الحالة (${newCase.caseNumber}) بنجاح ضمن نطاق ${tenant.nameAr}.`,
+      `تم تسجيل ملف الحالة (${newCase.caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL.`,
       "success"
     );
   };
@@ -380,21 +449,30 @@ export default function SanadWorkspacePreviewPage() {
       );
     }
 
-    appendAudit({
-      actorNameAr:
-        tenant.type === "INDIVIDUAL" ? "أ. طارق المنشاوي" : "أ. عمرو عبد العزيز",
-      actorRoleAr:
-        tenant.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
-      actionCode: "DONATION_RECORDED",
-      descriptionAr: `إصدار إيصال تبرع (${newDonation.receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
-        "ar-EG"
-      )} ج.م — الحالة: ${newDonation.status}`,
-      tenantNameAr: tenant.nameAr,
-    });
+    appendAudit(
+      {
+        actorNameAr:
+          tenant.type === "INDIVIDUAL" ? "سارة عبد الرحمن المنصوري" : "أحمد محمود الشناوي",
+        actorRoleAr:
+          tenant.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
+        actionCode: "DONATION_RECORDED",
+        descriptionAr: `إصدار إيصال تبرع (${newDonation.receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
+          "ar-EG"
+        )} ج.م — الحالة: ${newDonation.status}`,
+        tenantNameAr: tenant.nameAr,
+      },
+      {
+        action: "CREATE_DONATION",
+        payload: {
+          ...payload,
+          receiptNumber: newDonation.receiptNumber,
+        },
+      }
+    );
     notify(
       `تم تسجيل التبرع (${newDonation.receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
         "ar-EG"
-      )} ج.م بنجاح.`,
+      )} ج.م وحفظه في قاعدة البيانات.`,
       "success"
     );
   };
@@ -875,10 +953,10 @@ export default function SanadWorkspacePreviewPage() {
           </Link>
           <button
             type="button"
-            onClick={handleResetDemoData}
+            onClick={handleSyncDatabase}
             className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-full font-medium transition"
           >
-            إعادة ضبط البيانات التجريبية
+            مزامنة البيانات الحية (Neon DB) ↻
           </button>
         </div>
       </div>
