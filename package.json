@@ -9,6 +9,7 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "db:generate": "pnpm --filter @sanad/database db:generate",
+    "db:push": "pnpm --filter @sanad/database db:push",
     "db:migrate": "pnpm --filter @sanad/database db:migrate",
     "db:seed": "pnpm --filter @sanad/database db:seed"
   },

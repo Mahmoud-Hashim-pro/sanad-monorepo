@@ -57,6 +57,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@sanad/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@sanad/shared':
         specifier: workspace:*
         version: link:../../packages/shared
