@@ -1,0 +1,849 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantType {
+  ASSOCIATION
+  INDIVIDUAL
+}
+
+enum TenantStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum AccountStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  LOCKED
+  SUSPENDED
+}
+
+enum RoleCode {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  RESEARCH_SUPERVISOR
+  VOLUNTEER
+  BENEFICIARY
+}
+
+enum CaseStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  ASSIGNED
+  RESEARCH_IN_PROGRESS
+  RESEARCH_SUBMITTED
+  NEEDS_INFORMATION
+  APPROVED
+  REJECTED
+  ACTIVE
+  CLOSED
+  REOPENED
+}
+
+enum ResearchStatus {
+  NOT_STARTED
+  ASSIGNED
+  SCHEDULED
+  IN_PROGRESS
+  SUBMITTED
+  NEEDS_REVISION
+  REVIEWED
+}
+
+enum EligibilityDecisionType {
+  ELIGIBLE
+  INELIGIBLE
+  DEFERRED
+  CONDITIONAL
+}
+
+enum AssistanceTargetType {
+  PERSON
+  HOUSEHOLD
+}
+
+enum AidCategory {
+  FINANCIAL_SUPPORT
+  FOOD_SUPPLY
+  MEDICAL_AID
+  EDUCATION_SUPPORT
+  HOUSING_REPAIR
+  DEBT_RELIEF
+  SEASONAL_CAMPAIGN
+  MARRIAGE_SUPPORT
+}
+
+enum DonationType {
+  MONETARY
+  IN_KIND
+  VOLUNTEER_SERVICE
+}
+
+enum DonationStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  CONFIRMED
+  PARTIALLY_ALLOCATED
+  FULLY_ALLOCATED
+  CANCELLED
+  REVERSED
+}
+
+enum AllocationStatus {
+  RESERVED
+  PARTIALLY_DELIVERED
+  DELIVERED
+  RELEASED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  SCHEDULED
+  ASSIGNED
+  CONFIRMED
+  PARTIALLY_DELIVERED
+  FAILED
+  CANCELLED
+  REVERSED
+}
+
+enum IdentityClaimStatus {
+  PENDING_REVIEW
+  VERIFIED_APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum SharingRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  REVOKED
+  EXPIRED
+}
+
+model PersonIdentity {
+  id                     String   @id @default(uuid()) @db.Uuid
+  nationalIdHmac         String   @unique @map("national_id_hmac") @db.VarChar(128)
+  nationalIdEncrypted    String   @map("national_id_encrypted") @db.Text
+  maskedNationalId       String   @map("masked_national_id") @db.VarChar(14)
+  birthDate              DateTime @map("birth_date") @db.Date
+  governorateCode        String   @map("governorate_code") @db.VarChar(2)
+  isVerified             Boolean  @default(false) @map("is_verified")
+  verifiedAt             DateTime? @map("verified_at") @db.Timestamptz(6)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user                   User?
+  beneficiary            Beneficiary?
+
+  @@index([governorateCode])
+  @@map("person_identities")
+}
+
+model User {
+  id                  String        @id @default(uuid()) @db.Uuid
+  personIdentityId    String        @unique @map("person_identity_id") @db.Uuid
+  fullNameAr          String        @map("full_name_ar") @db.VarChar(200)
+  passwordHash        String        @map("password_hash") @db.Text
+  status              AccountStatus @default(PENDING_VERIFICATION)
+  failedLoginAttempts Int           @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?     @map("locked_until") @db.Timestamptz(6)
+  lastLoginAt         DateTime?     @map("last_login_at") @db.Timestamptz(6)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  personIdentity      PersonIdentity     @relation(fields: [personIdentityId], references: [id], onDelete: Restrict)
+  phones              UserPhone[]
+  ownedTenants        Tenant[]           @relation("TenantOwner")
+  memberships         TenantMembership[]
+  beneficiaryAccount  BeneficiaryAccount?
+  auditLogs           AuditLog[]
+
+  @@map("users")
+}
+
+model UserPhone {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  phoneE164       String    @map("phone_e164") @db.VarChar(20)
+  isPrimaryLogin  Boolean   @default(false) @map("is_primary_login")
+  isSharedContact Boolean   @default(false) @map("is_shared_contact")
+  isVerified      Boolean   @default(false) @map("is_verified")
+  verifiedAt      DateTime? @map("verified_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phoneE164, isPrimaryLogin, isVerified])
+  @@index([userId])
+  @@map("user_phones")
+}
+
+model Tenant {
+  id                     String       @id @default(uuid()) @db.Uuid
+  type                   TenantType
+  nameAr                 String       @map("name_ar") @db.VarChar(255)
+  registrationNumber     String?      @unique @map("registration_number") @db.VarChar(100)
+  governorate            String       @db.VarChar(100)
+  ownerUserId            String       @map("owner_user_id") @db.Uuid
+  status                 TenantStatus @default(PENDING_APPROVAL)
+  contactPhoneE164       String       @map("contact_phone_e164") @db.VarChar(20)
+  contactEmail           String?      @map("contact_email") @db.VarChar(255)
+  addressAr              String?      @map("address_ar") @db.Text
+  acceptsPublicRequests  Boolean      @default(true) @map("accepts_public_requests")
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner                  User                  @relation("TenantOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  memberships            TenantMembership[]
+  tenantBeneficiaries    TenantBeneficiary[]
+  cases                  Case[]
+  assistanceRequests     AssistanceRequest[]
+  tenantDonors           TenantDonor[]
+  donations              Donation[]
+  aidItems               AidItem[]
+  allocations            Allocation[]
+  aidDeliveries          AidDelivery[]
+
+  @@index([status, type])
+  @@map("tenants")
+}
+
+model TenantMembership {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  userId      String            @map("user_id") @db.Uuid
+  isActive    Boolean           @default(true) @map("is_active")
+  joinedAt    DateTime          @default(now()) @map("joined_at") @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roles       MembershipRole[]
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+model Role {
+  id              String           @id @default(uuid()) @db.Uuid
+  code            RoleCode         @unique
+  nameAr          String           @map("name_ar") @db.VarChar(100)
+  descriptionAr   String?          @map("description_ar") @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  membershipRoles MembershipRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id              String           @id @default(uuid()) @db.Uuid
+  code            String           @unique @db.VarChar(120)
+  module          String           @db.VarChar(60)
+  descriptionAr   String           @map("description_ar") @db.Text
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model MembershipRole {
+  id           String           @id @default(uuid()) @db.Uuid
+  membershipId String           @map("membership_id") @db.Uuid
+  roleId       String           @map("role_id") @db.Uuid
+  assignedAt   DateTime         @default(now()) @map("assigned_at") @db.Timestamptz(6)
+
+  membership   TenantMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role         Role             @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@unique([membershipId, roleId])
+  @@map("membership_roles")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid()) @db.Uuid
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Beneficiary {
+  id                    String               @id @default(uuid()) @db.Uuid
+  personIdentityId      String               @unique @map("person_identity_id") @db.Uuid
+  fullNameAr            String               @map("full_name_ar") @db.VarChar(200)
+  primaryContactPhone   String               @map("primary_contact_phone") @db.VarChar(20)
+  maritalStatusAr       String?              @map("marital_status_ar") @db.VarChar(60)
+  occupationAr          String?              @map("occupation_ar") @db.VarChar(120)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  personIdentity        PersonIdentity       @relation(fields: [personIdentityId], references: [id], onDelete: Restrict)
+  beneficiaryAccount    BeneficiaryAccount?
+  tenantLinks           TenantBeneficiary[]
+  householdMemberships  HouseholdMember[]
+  cases                 Case[]
+  assistanceRequests    AssistanceRequest[]
+  aidDeliveries         AidDelivery[]
+  identityClaims        IdentityClaim[]
+
+  @@map("beneficiaries")
+}
+
+model BeneficiaryAccount {
+  id               String      @id @default(uuid()) @db.Uuid
+  beneficiaryId    String      @unique @map("beneficiary_id") @db.Uuid
+  userId           String      @unique @map("user_id") @db.Uuid
+  linkedViaClaimId String?     @map("linked_via_claim_id") @db.Uuid
+  linkedAt         DateTime    @default(now()) @map("linked_at") @db.Timestamptz(6)
+
+  beneficiary      Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  user             User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("beneficiary_accounts")
+}
+
+model TenantBeneficiary {
+  id               String      @id @default(uuid()) @db.Uuid
+  tenantId         String      @map("tenant_id") @db.Uuid
+  beneficiaryId    String      @map("beneficiary_id") @db.Uuid
+  fileCode         String      @map("file_code") @db.VarChar(60)
+  status           String      @default("ACTIVE") @db.VarChar(40)
+  registeredById   String      @map("registered_by_id") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  beneficiary      Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, beneficiaryId])
+  @@unique([tenantId, fileCode])
+  @@index([beneficiaryId])
+  @@map("tenant_beneficiaries")
+}
+
+model Household {
+  id                   String              @id @default(uuid()) @db.Uuid
+  tenantId             String              @map("tenant_id") @db.Uuid
+  householdCode        String              @map("household_code") @db.VarChar(60)
+  governorate          String              @db.VarChar(100)
+  cityOrCenterAr       String              @map("city_or_center_ar") @db.VarChar(100)
+  addressDetailsAr     String              @map("address_details_ar") @db.Text
+  primaryContactPhone  String              @map("primary_contact_phone") @db.VarChar(20)
+  monthlyIncomePiasters BigInt             @default(0) @map("monthly_income_piasters")
+  monthlyExpensesPiasters BigInt           @default(0) @map("monthly_expenses_piasters")
+  housingConditionAr   String?             @map("housing_condition_ar") @db.VarChar(150)
+  socialConditionsJson Json?               @map("social_conditions_json")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  members              HouseholdMember[]
+  cases                Case[]
+  assistanceRequests   AssistanceRequest[]
+
+  @@unique([tenantId, householdCode])
+  @@index([tenantId])
+  @@map("households")
+}
+
+model HouseholdMember {
+  id               String      @id @default(uuid()) @db.Uuid
+  householdId      String      @map("household_id") @db.Uuid
+  beneficiaryId    String      @map("beneficiary_id") @db.Uuid
+  relationshipAr   String      @map("relationship_ar") @db.VarChar(60)
+  isHead           Boolean     @default(false) @map("is_head")
+  effectiveFrom    DateTime    @default(now()) @map("effective_from") @db.Timestamptz(6)
+  effectiveTo      DateTime?   @map("effective_to") @db.Timestamptz(6)
+  isActive         Boolean     @default(true) @map("is_active")
+
+  household        Household   @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  beneficiary      Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+
+  @@index([householdId, isActive])
+  @@index([beneficiaryId])
+  @@map("household_members")
+}
+
+model Case {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  tenantId             String                  @map("tenant_id") @db.Uuid
+  beneficiaryId        String                  @map("beneficiary_id") @db.Uuid
+  householdId          String?                 @map("household_id") @db.Uuid
+  caseNumber           String                  @map("case_number") @db.VarChar(60)
+  titleAr              String                  @map("title_ar") @db.VarChar(255)
+  caseStatus           CaseStatus              @default(DRAFT) @map("case_status")
+  researchStatus       ResearchStatus          @default(NOT_STARTED) @map("research_status")
+  eligibilityDecision  EligibilityDecisionType? @map("eligibility_decision")
+  priorityLevel        String                  @default("MEDIUM") @map("priority_level") @db.VarChar(30)
+  openedAt             DateTime                @default(now()) @map("opened_at") @db.Timestamptz(6)
+  closedAt             DateTime?               @map("closed_at") @db.Timestamptz(6)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant               Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  beneficiary          Beneficiary             @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  household            Household?              @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  assistanceRequests   AssistanceRequest[]
+  statusEvents         CaseStatusEvent[]
+  researchAssignments  ResearchAssignment[]
+  researchReports      ResearchReport[]
+  decisions            CaseDecision[]
+
+  @@unique([tenantId, caseNumber])
+  @@index([tenantId, caseStatus])
+  @@index([beneficiaryId])
+  @@map("cases")
+}
+
+model AssistanceRequest {
+  id                      String               @id @default(uuid()) @db.Uuid
+  tenantId                String               @map("tenant_id") @db.Uuid
+  caseId                  String?              @map("case_id") @db.Uuid
+  beneficiaryId           String               @map("beneficiary_id") @db.Uuid
+  householdId             String?              @map("household_id") @db.Uuid
+  requestNumber           String               @map("request_number") @db.VarChar(60)
+  targetType              AssistanceTargetType @default(PERSON) @map("target_type")
+  category                AidCategory
+  descriptionAr           String               @map("description_ar") @db.Text
+  requestedAmountPiasters BigInt?              @map("requested_amount_piasters")
+  approvedAmountPiasters  BigInt?              @map("approved_amount_piasters")
+  status                  String               @default("SUBMITTED") @db.VarChar(40)
+  allocationStatus        String               @default("UNALLOCATED") @map("allocation_status") @db.VarChar(40)
+  deliveryStatus          String               @default("PENDING") @map("delivery_status") @db.VarChar(40)
+  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                    Case?                @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  beneficiary             Beneficiary          @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  household               Household?           @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  allocations             Allocation[]
+  aidDeliveries           AidDelivery[]
+
+  @@unique([tenantId, requestNumber])
+  @@index([tenantId, status])
+  @@index([beneficiaryId])
+  @@map("assistance_requests")
+}
+
+model CaseStatusEvent {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @map("tenant_id") @db.Uuid
+  caseId      String     @map("case_id") @db.Uuid
+  fromStatus  CaseStatus? @map("from_status")
+  toStatus    CaseStatus @map("to_status")
+  actorUserId String     @map("actor_user_id") @db.Uuid
+  reasonAr    String?    @map("reason_ar") @db.Text
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  case        Case       @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  @@index([caseId, createdAt])
+  @@map("case_status_events")
+}
+
+model ResearchAssignment {
+  id                 String         @id @default(uuid()) @db.Uuid
+  tenantId           String         @map("tenant_id") @db.Uuid
+  caseId             String         @map("case_id") @db.Uuid
+  volunteerUserId    String         @map("volunteer_user_id") @db.Uuid
+  supervisorUserId   String         @map("supervisor_user_id") @db.Uuid
+  scheduledVisitDate DateTime?      @map("scheduled_visit_date") @db.Timestamptz(6)
+  status             ResearchStatus @default(ASSIGNED)
+  notesAr            String?        @map("notes_ar") @db.Text
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  case               Case           @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, volunteerUserId])
+  @@map("research_assignments")
+}
+
+model ResearchReport {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  tenantId            String                  @map("tenant_id") @db.Uuid
+  caseId              String                  @map("case_id") @db.Uuid
+  authorUserId        String                  @map("author_user_id") @db.Uuid
+  reviewerUserId      String?                 @map("reviewer_user_id") @db.Uuid
+  currentVersion      Int                     @default(1) @map("current_version")
+  status              ResearchStatus          @default(IN_PROGRESS)
+  recommendation      EligibilityDecisionType?
+  containsSensitiveInfo Boolean               @default(false) @map("contains_sensitive_info")
+  reviewedAt          DateTime?               @map("reviewed_at") @db.Timestamptz(6)
+  reviewReasonAr      String?                 @map("review_reason_ar") @db.Text
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  case                Case                    @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  versions            ResearchReportVersion[]
+
+  @@index([tenantId, caseId])
+  @@map("research_reports")
+}
+
+model ResearchReportVersion {
+  id                       String         @id @default(uuid()) @db.Uuid
+  reportId                 String         @map("report_id") @db.Uuid
+  versionNumber            Int            @map("version_number")
+  authorUserId             String         @map("author_user_id") @db.Uuid
+  householdAssessmentAr    String         @map("household_assessment_ar") @db.Text
+  incomeAssessmentPiasters BigInt         @map("income_assessment_piasters")
+  expenseAssessmentPiasters BigInt        @map("expense_assessment_piasters")
+  needsAssessmentAr        String         @map("needs_assessment_ar") @db.Text
+  sensitiveHealthNotesEncrypted String?   @map("sensitive_health_notes_encrypted") @db.Text
+  createdAt                DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  report                   ResearchReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+
+  @@unique([reportId, versionNumber])
+  @@map("research_report_versions")
+}
+
+model CaseDecision {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  tenantId             String                  @map("tenant_id") @db.Uuid
+  caseId               String                  @map("case_id") @db.Uuid
+  reportId             String?                 @map("report_id") @db.Uuid
+  decidedByUserId      String                  @map("decided_by_user_id") @db.Uuid
+  decision             EligibilityDecisionType
+  reasonAr             String                  @map("reason_ar") @db.Text
+  decidedAt            DateTime                @default(now()) @map("decided_at") @db.Timestamptz(6)
+
+  case                 Case                    @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, caseId])
+  @@map("case_decisions")
+}
+
+model Donor {
+  id                 String        @id @default(uuid()) @db.Uuid
+  donorType          String        @default("INDIVIDUAL") @map("donor_type") @db.VarChar(40)
+  fullNameAr         String        @map("full_name_ar") @db.VarChar(200)
+  phoneE164          String?       @map("phone_e164") @db.VarChar(20)
+  email              String?       @map("email") @db.VarChar(255)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenantDonors       TenantDonor[]
+  donations          Donation[]
+
+  @@map("donors")
+}
+
+model TenantDonor {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  donorId              String   @map("donor_id") @db.Uuid
+  isAnonymous          Boolean  @default(false) @map("is_anonymous")
+  communicationPrefs   Json?    @map("communication_prefs")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  donor                Donor    @relation(fields: [donorId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, donorId])
+  @@map("tenant_donors")
+}
+
+model Donation {
+  id                       String         @id @default(uuid()) @db.Uuid
+  tenantId                 String         @map("tenant_id") @db.Uuid
+  donorId                  String         @map("donor_id") @db.Uuid
+  receiptNumber            String         @map("receipt_number") @db.VarChar(60)
+  donationType             DonationType   @map("donation_type")
+  status                   DonationStatus @default(DRAFT)
+  restrictedCategory       AidCategory?   @map("restricted_category")
+  totalAmountPiasters      BigInt         @default(0) @map("total_amount_piasters")
+  reservedAmountPiasters   BigInt         @default(0) @map("reserved_amount_piasters")
+  deliveredAmountPiasters  BigInt         @default(0) @map("delivered_amount_piasters")
+  availableAmountPiasters  BigInt         @default(0) @map("available_amount_piasters")
+  confirmedAt              DateTime?      @map("confirmed_at") @db.Timestamptz(6)
+  confirmedByUserId        String?        @map("confirmed_by_user_id") @db.Uuid
+  notesAr                  String?        @map("notes_ar") @db.Text
+  createdAt                DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant                   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  donor                    Donor          @relation(fields: [donorId], references: [id], onDelete: Restrict)
+  items                    DonationItem[]
+  allocations              Allocation[]
+
+  @@unique([tenantId, receiptNumber])
+  @@index([tenantId, status])
+  @@map("donations")
+}
+
+model AidItem {
+  id                  String         @id @default(uuid()) @db.Uuid
+  tenantId            String         @map("tenant_id") @db.Uuid
+  itemCode            String         @map("item_code") @db.VarChar(60)
+  nameAr              String         @map("name_ar") @db.VarChar(200)
+  category            AidCategory
+  unitAr              String         @map("unit_ar") @db.VarChar(40)
+  quantityReceived    Int            @default(0) @map("quantity_received")
+  quantityReserved    Int            @default(0) @map("quantity_reserved")
+  quantityDelivered   Int            @default(0) @map("quantity_delivered")
+  quantityAvailable   Int            @default(0) @map("quantity_available")
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  donationItems       DonationItem[]
+
+  @@unique([tenantId, itemCode])
+  @@map("aid_items")
+}
+
+model DonationItem {
+  id                String       @id @default(uuid()) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  donationId        String       @map("donation_id") @db.Uuid
+  aidItemId         String       @map("aid_item_id") @db.Uuid
+  quantityReceived  Int          @map("quantity_received")
+  quantityReserved  Int          @default(0) @map("quantity_reserved")
+  quantityDelivered Int          @default(0) @map("quantity_delivered")
+  quantityAvailable Int          @map("quantity_available")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  donation          Donation     @relation(fields: [donationId], references: [id], onDelete: Restrict)
+  aidItem           AidItem      @relation(fields: [aidItemId], references: [id], onDelete: Restrict)
+  allocations       Allocation[]
+
+  @@index([donationId])
+  @@map("donation_items")
+}
+
+model Allocation {
+  id                      String            @id @default(uuid()) @db.Uuid
+  tenantId                String            @map("tenant_id") @db.Uuid
+  donationId              String            @map("donation_id") @db.Uuid
+  donationItemId          String?           @map("donation_item_id") @db.Uuid
+  assistanceRequestId     String            @map("assistance_request_id") @db.Uuid
+  status                  AllocationStatus  @default(RESERVED)
+  allocatedAmountPiasters BigInt?           @map("allocated_amount_piasters")
+  allocatedQuantity       Int?              @map("allocated_quantity")
+  createdByUserId         String            @map("created_by_user_id") @db.Uuid
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  donation                Donation          @relation(fields: [donationId], references: [id], onDelete: Restrict)
+  donationItem            DonationItem?     @relation(fields: [donationItemId], references: [id], onDelete: Restrict)
+  assistanceRequest       AssistanceRequest @relation(fields: [assistanceRequestId], references: [id], onDelete: Restrict)
+  events                  AllocationEvent[]
+  deliveries              AidDelivery[]
+
+  @@index([tenantId, status])
+  @@index([assistanceRequestId])
+  @@map("allocations")
+}
+
+model AllocationEvent {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @map("tenant_id") @db.Uuid
+  allocationId String     @map("allocation_id") @db.Uuid
+  eventType    String     @map("event_type") @db.VarChar(60)
+  actorUserId  String     @map("actor_user_id") @db.Uuid
+  reasonAr     String?    @map("reason_ar") @db.Text
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  allocation   Allocation @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+
+  @@index([allocationId])
+  @@map("allocation_events")
+}
+
+model AidDelivery {
+  id                      String               @id @default(uuid()) @db.Uuid
+  tenantId                String               @map("tenant_id") @db.Uuid
+  allocationId            String               @map("allocation_id") @db.Uuid
+  assistanceRequestId     String               @map("assistance_request_id") @db.Uuid
+  beneficiaryId           String               @map("beneficiary_id") @db.Uuid
+  householdId             String?              @map("household_id") @db.Uuid
+  targetType              AssistanceTargetType @default(PERSON) @map("target_type")
+  assignedVolunteerUserId String?              @map("assigned_volunteer_user_id") @db.Uuid
+  status                  DeliveryStatus       @default(SCHEDULED)
+  deliveredAmountPiasters BigInt?              @map("delivered_amount_piasters")
+  deliveredQuantity       Int?                 @map("delivered_quantity")
+  unitAr                  String?              @map("unit_ar") @db.VarChar(40)
+  authorizedDescriptionAr String               @map("authorized_description_ar") @db.Text
+  scheduledAt             DateTime             @map("scheduled_at") @db.Timestamptz(6)
+  confirmedAt             DateTime?            @map("confirmed_at") @db.Timestamptz(6)
+  idempotencyKey          String               @unique @map("idempotency_key") @db.VarChar(120)
+  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  allocation              Allocation           @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  assistanceRequest       AssistanceRequest    @relation(fields: [assistanceRequestId], references: [id], onDelete: Restrict)
+  beneficiary             Beneficiary          @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  events                  AidDeliveryEvent[]
+
+  @@index([beneficiaryId, status, confirmedAt])
+  @@index([tenantId, status])
+  @@map("aid_deliveries")
+}
+
+model AidDeliveryEvent {
+  id            String      @id @default(uuid()) @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  aidDeliveryId String      @map("aid_delivery_id") @db.Uuid
+  eventType     String      @map("event_type") @db.VarChar(60)
+  actorUserId   String      @map("actor_user_id") @db.Uuid
+  notesAr       String?     @map("notes_ar") @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  aidDelivery   AidDelivery @relation(fields: [aidDeliveryId], references: [id], onDelete: Restrict)
+
+  @@index([aidDeliveryId])
+  @@map("aid_delivery_events")
+}
+
+model IdentityClaim {
+  id                String              @id @default(uuid()) @db.Uuid
+  userId            String              @map("user_id") @db.Uuid
+  beneficiaryId     String              @map("beneficiary_id") @db.Uuid
+  status            IdentityClaimStatus @default(PENDING_REVIEW)
+  verificationNotes String?             @map("verification_notes") @db.Text
+  reviewedByUserId  String?             @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt        DateTime?           @map("reviewed_at") @db.Timestamptz(6)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  beneficiary       Beneficiary         @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@map("identity_claims")
+}
+
+model IdentityMatchCandidate {
+  id                   String   @id @default(uuid()) @db.Uuid
+  sourceBeneficiaryId  String   @map("source_beneficiary_id") @db.Uuid
+  candidateBeneficiaryId String @map("candidate_beneficiary_id") @db.Uuid
+  matchReasonCode      String   @map("match_reason_code") @db.VarChar(60)
+  resolutionStatus     String   @default("PENDING_REVIEW") @map("resolution_status") @db.VarChar(40)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([sourceBeneficiaryId])
+  @@map("identity_match_candidates")
+}
+
+model DataSharingRequest {
+  id                  String               @id @default(uuid()) @db.Uuid
+  requestingTenantId  String               @map("requesting_tenant_id") @db.Uuid
+  owningTenantId      String               @map("owning_tenant_id") @db.Uuid
+  beneficiaryId       String               @map("beneficiary_id") @db.Uuid
+  requestedScopeJson  Json                 @map("requested_scope_json")
+  status              SharingRequestStatus @default(PENDING)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([owningTenantId, status])
+  @@map("data_sharing_requests")
+}
+
+model DataSharingGrant {
+  id                  String    @id @default(uuid()) @db.Uuid
+  sharingRequestId    String    @map("sharing_request_id") @db.Uuid
+  grantedToTenantId   String    @map("granted_to_tenant_id") @db.Uuid
+  beneficiaryId       String    @map("beneficiary_id") @db.Uuid
+  allowedScopeJson    Json      @map("allowed_scope_json")
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([grantedToTenantId, beneficiaryId])
+  @@map("data_sharing_grants")
+}
+
+model ConsentRecord {
+  id            String    @id @default(uuid()) @db.Uuid
+  beneficiaryId String    @map("beneficiary_id") @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  consentType   String    @map("consent_type") @db.VarChar(80)
+  isGranted     Boolean   @default(true) @map("is_granted")
+  grantedAt     DateTime  @default(now()) @map("granted_at") @db.Timestamptz(6)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  @@index([beneficiaryId])
+  @@map("consent_records")
+}
+
+model Attachment {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String?  @map("tenant_id") @db.Uuid
+  ownerEntityType  String   @map("owner_entity_type") @db.VarChar(60)
+  ownerEntityId    String   @map("owner_entity_id") @db.Uuid
+  fileName         String   @map("file_name") @db.VarChar(255)
+  mimeType         String   @map("mime_type") @db.VarChar(100)
+  storageKey       String   @map("storage_key") @db.Text
+  isSensitive      Boolean  @default(false) @map("is_sensitive")
+  uploadedByUserId String   @map("uploaded_by_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([ownerEntityType, ownerEntityId])
+  @@map("attachments")
+}
+
+model Notification {
+  id              String    @id @default(uuid()) @db.Uuid
+  recipientUserId String    @map("recipient_user_id") @db.Uuid
+  tenantId        String?   @map("tenant_id") @db.Uuid
+  titleAr         String    @map("title_ar") @db.VarChar(200)
+  bodyAr          String    @map("body_ar") @db.Text
+  readAt          DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([recipientUserId, readAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String?  @map("tenant_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  actionCode     String   @map("action_code") @db.VarChar(100)
+  resourceType   String   @map("resource_type") @db.VarChar(80)
+  resourceId     String?  @map("resource_id") @db.VarChar(100)
+  ipAddress      String?  @map("ip_address") @db.VarChar(60)
+  metadataJson   Json?    @map("metadata_json")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor          User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([actionCode, createdAt])
+  @@map("audit_logs")
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  idempotencyKey String   @unique @map("idempotency_key") @db.VarChar(120)
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  endpoint       String   @db.VarChar(200)
+  requestHash    String   @map("request_hash") @db.VarChar(128)
+  responseCode   Int      @map("response_code")
+  responseBody   Json     @map("response_body")
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
