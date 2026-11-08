@@ -270,7 +270,7 @@ export default function SanadDynamicPlatformPage() {
     );
     if (ok) {
       notify(
-        `تم إدراج "${payload.nameAr}" وحفظه مباشرة في قاعدة بيانات Neon PostgreSQL.`,
+        `تم إدراج "${payload.nameAr}" وحفظه بنجاح.`,
         "success"
       );
     }
@@ -364,7 +364,7 @@ export default function SanadDynamicPlatformPage() {
     );
     if (ok) {
       notify(
-        `تم تسجيل ملف الحالة (${caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL.`,
+        `تم تسجيل ملف الحالة (${caseNumber}) وحفظه بنجاح.`,
         "success"
       );
     }
@@ -674,7 +674,7 @@ export default function SanadDynamicPlatformPage() {
     );
     if (ok) {
       notify(
-        `تم إرسال طلب المساعدة (${caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL بنجاح!`,
+        `تم إرسال طلب المساعدة (${caseNumber}) وحفظه بنجاح!`,
         "success"
       );
     }
