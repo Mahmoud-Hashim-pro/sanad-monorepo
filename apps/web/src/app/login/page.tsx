@@ -50,12 +50,12 @@ export default function SanadLoginPage() {
         onNotify={showToast}
         onAuthenticatedSuccess={(payload) => {
           showToast(
-            `مرحباً ${payload.fullNameAr}! تم توثيق الرقم القومي والبريد (${payload.email}) بنجاح — جاري توجيهك لمساحة العمل...`,
+            `مرحباً ${payload.user.fullNameAr}! تم توثيق الجلسة (${payload.user.email}) — جاري توجيهك لمساحة العمل...`,
             "success"
           );
           setTimeout(() => {
-            router.push(`/?view=${payload.targetRole}`);
-          }, 900);
+            router.push("/");
+          }, 600);
         }}
       />
     </main>

@@ -21,14 +21,25 @@ export type TargetAuthRole =
   | "VOLUNTEER"
   | "BENEFICIARY";
 
+export type PublicRegistrableRole = Exclude<TargetAuthRole, "SUPER_ADMIN">;
+
+export interface AuthenticatedSessionUser {
+  userId: string;
+  email: string;
+  fullNameAr: string;
+  role: TargetAuthRole;
+  tenantId: string | null;
+  tenantNameAr: string;
+  nationalIdMasked: string;
+  phoneE164: string;
+  governorateNameAr: string;
+  permissions: string[];
+}
+
 interface AuthNationalIdWorkspaceProps {
   fullScreenPage?: boolean;
   onAuthenticatedSuccess?: (payload: {
-    fullNameAr: string;
-    email: string;
-    nationalId: string;
-    phoneE164: string;
-    governorateNameAr: string;
+    user: AuthenticatedSessionUser;
     targetRole: TargetAuthRole;
     mode: "LOGIN" | "REGISTER";
     correlationId: string;
@@ -42,9 +53,10 @@ export function AuthNationalIdWorkspace({
   onNotify,
 }: AuthNationalIdWorkspaceProps) {
   const [authMode, setAuthMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
-  const [targetRole, setTargetRole] = useState<TargetAuthRole>("SUPER_ADMIN");
+  const [registerRole, setRegisterRole] =
+    useState<PublicRegistrableRole>("BENEFICIARY");
 
-  // Clean dynamic form fields (zero hardcoded presets)
+  // Clean dynamic form fields
   const [fullNameInput, setFullNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [nationalIdInput, setNationalIdInput] = useState("");
@@ -68,7 +80,7 @@ export function AuthNationalIdWorkspace({
   const otpResult = validateOtpCode(otpInput);
 
   const isLoginFormValid =
-    emailResult.isValid && passwordInput.trim().length >= 4;
+    emailResult.isValid && passwordInput.trim().length >= 6;
 
   const isRegisterFormValid =
     nameResult.isValid &&
@@ -124,13 +136,16 @@ export function AuthNationalIdWorkspace({
           mobile: mobileInput,
           password: passwordInput,
           otp: otpInput,
-          targetRole,
+          targetRole: authMode === "REGISTER" ? registerRole : undefined,
           organizationNameAr: orgNameInput,
         }),
       });
       const data = await res.json();
-      if (!res.ok || data?.ok === false) {
-        onNotify?.(data?.errorAr || "تعذر التحقق من البيانات المدخلة", "error");
+      if (!res.ok || data?.ok === false || !data?.user) {
+        onNotify?.(
+          data?.errorAr || "تعذر التحقق من بيانات الاعتماد المدخلة",
+          "error"
+        );
         return;
       }
 
@@ -138,26 +153,29 @@ export function AuthNationalIdWorkspace({
         data?.correlationId ||
         `SANAD-AUTH-${Date.now().toString(36).toUpperCase()}`;
 
+      const resolvedUser: AuthenticatedSessionUser = {
+        userId: data.user.userId,
+        email: data.user.email,
+        fullNameAr: data.user.fullNameAr,
+        role: data.user.role as TargetAuthRole,
+        tenantId: data.user.tenantId ?? null,
+        tenantNameAr: data.user.tenantNameAr || "منصة سَنَد",
+        nationalIdMasked: data.user.nationalIdMasked || "",
+        phoneE164: data.user.phoneE164 || "",
+        governorateNameAr: data.user.governorateNameAr || "القاهرة",
+        permissions: Array.isArray(data.user.permissions)
+          ? data.user.permissions
+          : [],
+      };
+
       onAuthenticatedSuccess?.({
-        fullNameAr:
-          data?.user?.fullNameAr || fullNameInput.trim() || emailInput.trim(),
-        email: data?.user?.email || emailInput.trim(),
-        nationalId:
-          nationalIdInput.trim() ||
-          data?.user?.maskedNationalId ||
-          "29501010101234",
-        phoneE164:
-          data?.user?.phoneE164 || phoneResult.e164 || "+201000000001",
-        governorateNameAr:
-          data?.user?.governorateNameAr ||
-          nidResult.parsed?.governorateNameAr ||
-          "القاهرة",
-        targetRole: (data?.user?.role || targetRole) as TargetAuthRole,
+        user: resolvedUser,
+        targetRole: resolvedUser.role,
         mode: authMode,
         correlationId,
       });
     } catch {
-      onNotify?.("حدث خطأ أثناء الاتصال بالخادم", "error");
+      onNotify?.("حدث خطأ أثناء الاتصال بخادم التوثيق", "error");
     } finally {
       setSubmitting(false);
     }
@@ -172,7 +190,7 @@ export function AuthNationalIdWorkspace({
           : "min-h-[calc(100vh-7.5rem)] w-full grid lg:grid-cols-12 rounded-3xl overflow-hidden shadow-xl border border-slate-200 bg-white"
       }
     >
-      {/* Right Side (in RTL): Clean Brand Panel (5 cols) */}
+      {/* Right Side (in RTL): Security & Governance Brand Panel (5 cols) */}
       <aside className="lg:col-span-5 bg-gradient-to-br from-purple-950 via-purple-900 to-indigo-950 text-white p-8 lg:p-10 flex flex-col justify-between space-y-8">
         <div className="space-y-6">
           <div className="flex items-center justify-between gap-4">
@@ -195,36 +213,40 @@ export function AuthNationalIdWorkspace({
                 href="/"
                 className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition"
               >
-                ← العودة للمنصة
+                ← الرئيسية
               </Link>
             )}
           </div>
 
           <div className="space-y-4 pt-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-xs font-bold">
+              <span>🔒</span>
+              <span>حماية الجلسات وصلاحيات الأدوار (RBAC & HttpOnly Session)</span>
+            </div>
             <h2 className="text-2xl lg:text-3xl font-extrabold leading-snug text-white">
-              الحوكمة الرقمية لإدارة الجمعيات الخيرية والمبادرات والبحث الميداني
+              بوابة الدخول الموثق والتحكم الصارم في الصلاحيات
             </h2>
             <p className="text-sm text-purple-100/90 leading-relaxed">
-              توفر منصة سَنَد بيئة سحابية آمنة لتسجيل المستفيدين بالرقم القومي المصري لمنع ازدواج الصرف، إدارة الأبحاث الميدانية باستقلالية كاملة، وتخصيص التبرعات المقيدة وغير المقيدة بشفافية.
+              تُحدد الصلاحيات ومساحات العمل تلقائياً من قاعدة البيانات وفقاً لدور المستخدم الموثق، مع تطبيق العزل الكامل لبيانات الجمعيات والمبادرات وفصل المهام الرقابية (Segregation of Duties).
             </p>
           </div>
 
           <div className="space-y-3 pt-2">
-            <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-2">
+            <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-1.5">
               <div className="text-xs font-bold text-emerald-300">
-                ✓ عزل كامل لبيانات كل جمعية ومبادرة
+                ✓ تحقق криптоجرافي من الهوية والجلسة (HMAC-SHA256 & Scrypt)
               </div>
               <p className="text-xs text-purple-100 leading-relaxed">
-                تعمل كل جهة خيرية أو مبادرة فردية داخل نطاق بيانات مستقل مع إمكانية التحقق المركزي لمنع تكرار صرف نفس المساعدة.
+                لا يُسمح بالوصول إلى أي بيانات أو عمليات قبل تسجيل الدخول وتوثيق الجلسة، وتُحدد الصلاحيات من السجل الرسمي للمستخدم في قاعدة البيانات.
               </p>
             </div>
 
-            <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-2">
+            <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-1.5">
               <div className="text-xs font-bold text-emerald-300">
-                ✓ فصل المهام الرقابية في البحث الاجتماعي
+                ✓ عزل كامل لبيانات كل جمعية ومبادرة (Row-Level Isolation)
               </div>
               <p className="text-xs text-purple-100 leading-relaxed">
-                يرفع الباحث الميداني تقرير الزيارة، بينما يختص مشرف البحث الاجتماعي بمراجعة واعتماد قرار الأهلية.
+                يصل مدير الجمعية أو المبادرة الفردية حصرياً إلى حالات وتبرعات جهته المسجلة، بينما تخضع صلاحيات مدير المنصة للتوثيق المركزي.
               </p>
             </div>
           </div>
@@ -232,7 +254,7 @@ export function AuthNationalIdWorkspace({
 
         <div className="border-t border-white/15 pt-5 text-xs text-purple-200 flex items-center justify-between">
           <span>منصة سَنَد للتكافل والحوكمة الاجتماعية</span>
-          <span className="font-mono text-emerald-300">SANAD Platform</span>
+          <span className="font-mono text-emerald-300">RBAC Protected</span>
         </div>
       </aside>
 
@@ -249,8 +271,8 @@ export function AuthNationalIdWorkspace({
               </h2>
               <p className="text-xs text-slate-600 mt-1">
                 {authMode === "LOGIN"
-                  ? "أدخل البريد الإلكتروني وكلمة المرور للدخول إلى مساحة العمل الخاصة بك."
-                  : "أكمل بيانات الهوية والرقم القومي المصري ورقم الهاتف المحمول لإنشاء حساب موثق."}
+                  ? "أدخل بريدك الإلكتروني المسجل وكلمة المرور؛ سيقوم النظام بتحديد دورك وصلاحياتك تلقائياً."
+                  : "أكمل بيانات الهوية والرقم القومي المصري ورقم الهاتف المحمول لإنشاء حساب جديد."}
               </p>
             </div>
 
@@ -281,57 +303,66 @@ export function AuthNationalIdWorkspace({
           </div>
 
           <form onSubmit={handleSubmitAuth} className="space-y-4" noValidate>
-            {/* Role Selector */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="auth-role-select"
-                className="block text-xs font-bold text-slate-800"
-              >
-                الدور الوظيفي / نوع الحساب:
-              </label>
-              <select
-                id="auth-role-select"
-                value={targetRole}
-                onChange={(e) => setTargetRole(e.target.value as TargetAuthRole)}
-                className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold bg-slate-50 focus:bg-white focus:border-purple-600 focus:outline-none"
-              >
-                <option value="SUPER_ADMIN">مدير المنصة المركزي (SUPER_ADMIN)</option>
-                <option value="ASSOCIATION_ADMIN">
-                  مدير جمعية / مؤسسة خيرية مشهرة (ASSOCIATION_ADMIN)
-                </option>
-                <option value="INDIVIDUAL_INITIATIVE">
-                  مبادر فردي مستقل (INDIVIDUAL_INITIATIVE)
-                </option>
-                <option value="RESEARCH_SUPERVISOR">
-                  مشرف البحث الاجتماعي (RESEARCH_SUPERVISOR)
-                </option>
-                <option value="VOLUNTEER">باحث / متطوع ميداني (VOLUNTEER)</option>
-                <option value="BENEFICIARY">مستفيد / طالب مساعدة (BENEFICIARY)</option>
-              </select>
-            </div>
-
+            {/* Role Selector ONLY shown in REGISTER mode, and NEVER includes SUPER_ADMIN */}
             {authMode === "REGISTER" && (
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="auth-fullname-input"
-                  className="block text-xs font-bold text-slate-800"
-                >
-                  الاسم الكامل رباعياً (كما في بطاقة الرقم القومي)
-                </label>
-                <input
-                  id="auth-fullname-input"
-                  type="text"
-                  autoComplete="name"
-                  required
-                  placeholder="أدخل الاسم الرباعي باللغة العربية"
-                  value={fullNameInput}
-                  onChange={(e) => setFullNameInput(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-purple-600 focus:outline-none"
-                />
-                {fullNameInput && !nameResult.isValid && (
-                  <div className="text-xs text-rose-700">{nameResult.messageAr}</div>
-                )}
-              </div>
+              <>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="auth-role-select"
+                    className="block text-xs font-bold text-slate-800"
+                  >
+                    نوع الحساب المطلوب إنشاؤه:
+                  </label>
+                  <select
+                    id="auth-role-select"
+                    value={registerRole}
+                    onChange={(e) =>
+                      setRegisterRole(e.target.value as PublicRegistrableRole)
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold bg-slate-50 focus:bg-white focus:border-purple-600 focus:outline-none"
+                  >
+                    <option value="BENEFICIARY">
+                      مستفيد / طالب مساعدة (BENEFICIARY)
+                    </option>
+                    <option value="VOLUNTEER">
+                      باحث / متطوع ميداني (VOLUNTEER)
+                    </option>
+                    <option value="RESEARCH_SUPERVISOR">
+                      مشرف البحث الاجتماعي (RESEARCH_SUPERVISOR)
+                    </option>
+                    <option value="ASSOCIATION_ADMIN">
+                      مدير جمعية / مؤسسة خيرية مشهرة (ASSOCIATION_ADMIN)
+                    </option>
+                    <option value="INDIVIDUAL_INITIATIVE">
+                      مبادر فردي مستقل (INDIVIDUAL_INITIATIVE)
+                    </option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="auth-fullname-input"
+                    className="block text-xs font-bold text-slate-800"
+                  >
+                    الاسم الكامل رباعياً (كما في بطاقة الرقم القومي)
+                  </label>
+                  <input
+                    id="auth-fullname-input"
+                    type="text"
+                    autoComplete="name"
+                    required
+                    placeholder="أدخل الاسم الرباعي باللغة العربية"
+                    value={fullNameInput}
+                    onChange={(e) => setFullNameInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-purple-600 focus:outline-none"
+                  />
+                  {fullNameInput && !nameResult.isValid && (
+                    <div className="text-xs text-rose-700">
+                      {nameResult.messageAr}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             {/* Email Input */}
@@ -354,7 +385,9 @@ export function AuthNationalIdWorkspace({
                 className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-mono text-left focus:border-purple-600 focus:outline-none"
               />
               {emailInput && !emailResult.isValid && (
-                <div className="text-xs text-rose-700">{emailResult.messageAr}</div>
+                <div className="text-xs text-rose-700">
+                  {emailResult.messageAr}
+                </div>
               )}
             </div>
 
@@ -410,8 +443,8 @@ export function AuthNationalIdWorkspace({
                       onChange={(e) => setNationalIdInput(e.target.value)}
                       className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-mono text-left tracking-wider focus:border-purple-600 focus:outline-none"
                     />
-                    {nationalIdInput && (
-                      nidResult.isValid && nidResult.parsed ? (
+                    {nationalIdInput &&
+                      (nidResult.isValid && nidResult.parsed ? (
                         <div className="text-xs text-emerald-700">
                           ✓ الميلاد: {nidResult.parsed.birthDateIso} | المحافظة:{" "}
                           {nidResult.parsed.governorateNameAr}
@@ -420,8 +453,7 @@ export function AuthNationalIdWorkspace({
                         <div className="text-xs text-rose-700">
                           {nidResult.errorAr}
                         </div>
-                      )
-                    )}
+                      ))}
                   </div>
 
                   <div className="space-y-1.5">
@@ -441,8 +473,8 @@ export function AuthNationalIdWorkspace({
                       onChange={(e) => setMobileInput(e.target.value)}
                       className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-mono text-left focus:border-purple-600 focus:outline-none"
                     />
-                    {mobileInput && (
-                      phoneResult.isValid ? (
+                    {mobileInput &&
+                      (phoneResult.isValid ? (
                         <div className="text-xs text-emerald-700 font-mono">
                           ✓ {phoneResult.e164}
                         </div>
@@ -450,13 +482,12 @@ export function AuthNationalIdWorkspace({
                         <div className="text-xs text-rose-700">
                           {phoneResult.errorAr}
                         </div>
-                      )
-                    )}
+                      ))}
                   </div>
                 </div>
 
-                {(targetRole === "ASSOCIATION_ADMIN" ||
-                  targetRole === "INDIVIDUAL_INITIATIVE") && (
+                {(registerRole === "ASSOCIATION_ADMIN" ||
+                  registerRole === "INDIVIDUAL_INITIATIVE") && (
                   <div className="space-y-1.5">
                     <label
                       htmlFor="auth-org-input"
@@ -536,9 +567,9 @@ export function AuthNationalIdWorkspace({
               className="w-full py-3.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-sm font-extrabold shadow-md transition disabled:opacity-50"
             >
               {submitting
-                ? "جاري التحقق والاتصال بقاعدة البيانات..."
+                ? "جاري التحقق من الهوية والصلاحيات..."
                 : authMode === "LOGIN"
-                ? "تسجيل الدخول"
+                ? "تسجيل الدخول الآمن"
                 : "إنشاء الحساب وتوثيق الهوية"}
             </button>
           </form>

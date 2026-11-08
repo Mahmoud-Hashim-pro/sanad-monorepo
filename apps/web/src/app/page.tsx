@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  AID_CATEGORIES_LABELS,
   type AidCategoryCode,
   type MockTenant,
   type MockCase,
@@ -15,7 +14,6 @@ import {
   type EligibilityDecision,
 } from "../lib/mock-data/fictional-seed";
 import {
-  maskEgyptianNationalId,
   canApproveResearchReport,
   validateAllocationRequest,
 } from "../lib/domain/sanad-rules";
@@ -27,47 +25,62 @@ import { BeneficiaryPortalWorkspace } from "../components/BeneficiaryPortalWorks
 import {
   AuthNationalIdWorkspace,
   type TargetAuthRole,
+  type AuthenticatedSessionUser,
 } from "../components/AuthNationalIdWorkspace";
 
-type ActiveRoleView =
-  | "SUPER_ADMIN"
-  | "ASSOCIATION_ADMIN"
-  | "INDIVIDUAL_INITIATIVE"
-  | "RESEARCH_SUPERVISOR"
-  | "VOLUNTEER"
-  | "BENEFICIARY"
-  | "AUTH_LOGIN_REGISTER";
+const ROLE_LABELS_AR: Record<TargetAuthRole, string> = {
+  SUPER_ADMIN: "مدير المنصة المركزي",
+  ASSOCIATION_ADMIN: "مدير جمعية خيرية",
+  INDIVIDUAL_INITIATIVE: "مبادر فردي مستقل",
+  RESEARCH_SUPERVISOR: "مشرف البحث الاجتماعي",
+  VOLUNTEER: "باحث / متطوع ميداني",
+  BENEFICIARY: "مستفيد",
+};
 
 export default function SanadDynamicPlatformPage() {
-  const [activeView, setActiveView] = useState<ActiveRoleView>("AUTH_LOGIN_REGISTER");
+  const [sessionUser, setSessionUser] =
+    useState<AuthenticatedSessionUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
+  const [activeView, setActiveView] = useState<TargetAuthRole>("BENEFICIARY");
+
   const [tenants, setTenants] = useState<MockTenant[]>([]);
   const [cases, setCases] = useState<MockCase[]>([]);
   const [donations, setDonations] = useState<MockDonation[]>([]);
   const [deliveries, setDeliveries] = useState<MockDelivery[]>([]);
-  const [sharingRequests, setSharingRequests] = useState<MockSharingRequest[]>([]);
+  const [sharingRequests, setSharingRequests] = useState<MockSharingRequest[]>(
+    []
+  );
   const [auditLogs, setAuditLogs] = useState<MockAuditLog[]>([]);
   const [consents, setConsents] = useState<MockConsentItem[]>([]);
 
   const [selectedAssnTenantId, setSelectedAssnTenantId] = useState<string>("");
   const [selectedIndTenantId, setSelectedIndTenantId] = useState<string>("");
 
-  const [loadingDb, setLoadingDb] = useState<boolean>(true);
+  const [loadingDb, setLoadingDb] = useState<boolean>(false);
+  const [signingOut, setSigningOut] = useState<boolean>(false);
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "warning" | "error";
   } | null>(null);
 
-  const notify = (
-    message: string,
-    type: "success" | "warning" | "error" = "success"
-  ) => {
-    setToast({ message, type });
-  };
+  const notify = useCallback(
+    (
+      message: string,
+      type: "success" | "warning" | "error" = "success"
+    ) => {
+      setToast({ message, type });
+    },
+    []
+  );
 
   const fetchLiveDatabaseState = useCallback(async () => {
     setLoadingDb(true);
     try {
       const res = await fetch("/api/state", { cache: "no-store" });
+      if (res.status === 401) {
+        setSessionUser(null);
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       if (data?.ok) {
@@ -87,6 +100,66 @@ export default function SanadDynamicPlatformPage() {
     }
   }, []);
 
+  // Verify HttpOnly session cookie on initial load
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem("sanad_interactive_state_v1");
+      window.localStorage.removeItem("sanad_interactive_state_v2");
+      window.localStorage.removeItem("sanad_live_state_v3");
+    } catch {
+      // Ignore
+    }
+
+    let cancelled = false;
+    (async () => {
+      setCheckingAuth(true);
+      try {
+        const res = await fetch("/api/auth", { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled && res.ok && data?.authenticated && data?.user) {
+          const verifiedUser = data.user as AuthenticatedSessionUser;
+          setSessionUser(verifiedUser);
+          setActiveView(verifiedUser.role);
+          if (verifiedUser.tenantId) {
+            setSelectedAssnTenantId(verifiedUser.tenantId);
+            setSelectedIndTenantId(verifiedUser.tenantId);
+          }
+          await fetchLiveDatabaseState();
+        } else if (!cancelled) {
+          setSessionUser(null);
+        }
+      } catch {
+        if (!cancelled) setSessionUser(null);
+      } finally {
+        if (!cancelled) setCheckingAuth(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchLiveDatabaseState]);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await fetch("/api/auth", { method: "DELETE" });
+    } catch {
+      // Ignore
+    } finally {
+      setSessionUser(null);
+      setTenants([]);
+      setCases([]);
+      setDonations([]);
+      setDeliveries([]);
+      setSharingRequests([]);
+      setAuditLogs([]);
+      setConsents([]);
+      setSigningOut(false);
+      notify("تم تسجيل الخروج وإنهاء الجلسة بأمان.", "success");
+    }
+  };
+
   const executeLiveAction = async (
     action: string,
     payload: Record<string, unknown>,
@@ -97,9 +170,9 @@ export default function SanadDynamicPlatformPage() {
       descriptionAr: string;
       tenantNameAr: string;
     }
-  ) => {
+  ): Promise<boolean> => {
     try {
-      await fetch("/api/state", {
+      const res = await fetch("/api/state", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -110,54 +183,50 @@ export default function SanadDynamicPlatformPage() {
           },
         }),
       });
+      const data = await res.json().catch(() => null);
+      if (res.status === 401) {
+        setSessionUser(null);
+        notify(
+          data?.errorAr || "انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى.",
+          "error"
+        );
+        return false;
+      }
+      if (!res.ok || data?.ok === false) {
+        notify(
+          data?.errorAr || "ليس لديك الصلاحية لتنفيذ هذا الإجراء.",
+          "error"
+        );
+        return false;
+      }
       await fetchLiveDatabaseState();
+      return true;
     } catch {
-      // Ignore network error
+      notify("حدث خطأ أثناء الاتصال بالخادم", "error");
+      return false;
     }
   };
 
-  // Purge any old cached browser keys and load live data from Neon PostgreSQL on mount
-  useEffect(() => {
-    try {
-      window.localStorage.removeItem("sanad_interactive_state_v1");
-      window.localStorage.removeItem("sanad_interactive_state_v2");
-      window.localStorage.removeItem("sanad_live_state_v3");
-
-      const params = new URLSearchParams(window.location.search);
-      const viewParam = params.get("view") as ActiveRoleView | null;
-      if (
-        viewParam &&
-        [
-          "SUPER_ADMIN",
-          "ASSOCIATION_ADMIN",
-          "INDIVIDUAL_INITIATIVE",
-          "RESEARCH_SUPERVISOR",
-          "VOLUNTEER",
-          "BENEFICIARY",
-          "AUTH_LOGIN_REGISTER",
-        ].includes(viewParam)
-      ) {
-        setActiveView(viewParam);
-      }
-    } catch {
-      // Ignore
-    }
-    void fetchLiveDatabaseState();
-  }, [fetchLiveDatabaseState]);
+  const actorDisplayName = sessionUser
+    ? `${sessionUser.fullNameAr} (${sessionUser.email})`
+    : "مستخدم موثق";
+  const actorRoleDisplay = sessionUser
+    ? ROLE_LABELS_AR[sessionUser.role]
+    : "";
 
   // Super Admin Handlers
-  const handleUpdateTenantStatus = (tenantId: string, status: TenantStatus) => {
+  const handleUpdateTenantStatus = async (
+    tenantId: string,
+    status: TenantStatus
+  ) => {
     const target = tenants.find((t) => t.id === tenantId);
     if (!target) return;
-    setTenants((prev) =>
-      prev.map((t) => (t.id === tenantId ? { ...t, status } : t))
-    );
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "UPDATE_TENANT_STATUS",
       { tenantId, status },
       {
-        actorNameAr: "م. محمود هاشم (eng.mhashim@gmail.com)",
-        actorRoleAr: "SUPER_ADMIN",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: status === "ACTIVE" ? "TENANT_APPROVED" : "TENANT_SUSPENDED",
         descriptionAr:
           status === "ACTIVE"
@@ -166,54 +235,57 @@ export default function SanadDynamicPlatformPage() {
         tenantNameAr: target.nameAr,
       }
     );
-    notify(
-      status === "ACTIVE"
-        ? `تم اعتماد وتفعيل "${target.nameAr}" في قاعدة البيانات بنجاح.`
-        : `تم إيقاف "${target.nameAr}" مؤقتاً في قاعدة البيانات.`,
-      status === "ACTIVE" ? "success" : "warning"
-    );
+    if (ok) {
+      notify(
+        status === "ACTIVE"
+          ? `تم اعتماد وتفعيل "${target.nameAr}" في قاعدة البيانات بنجاح.`
+          : `تم إيقاف "${target.nameAr}" مؤقتاً في قاعدة البيانات.`,
+        status === "ACTIVE" ? "success" : "warning"
+      );
+    }
   };
 
-  const handleCreateTenant = (payload: {
+  const handleCreateTenant = async (payload: {
     nameAr: string;
     type: "ASSOCIATION" | "INDIVIDUAL";
     governorate: string;
     registrationNumber?: string;
   }) => {
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "CREATE_TENANT",
       payload,
       {
-        actorNameAr: "م. محمود هاشم (eng.mhashim@gmail.com)",
-        actorRoleAr: "SUPER_ADMIN",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "TENANT_REGISTERED",
         descriptionAr: `إدراج كيان جديد (${payload.nameAr}) بانتظار الاعتماد`,
         tenantNameAr: payload.nameAr,
       }
     );
-    notify(
-      `تم إدراج "${payload.nameAr}" وحفظه مباشرة في قاعدة بيانات Neon PostgreSQL.`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم إدراج "${payload.nameAr}" وحفظه مباشرة في قاعدة بيانات Neon PostgreSQL.`,
+        "success"
+      );
+    }
   };
 
-  const handleDecideSharingRequest = (
+  const handleDecideSharingRequest = async (
     requestId: string,
     decision: "APPROVED" | "DENIED"
   ) => {
     const req = sharingRequests.find((r) => r.id === requestId);
     if (!req) return;
-    setSharingRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: decision } : r))
-    );
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "DECIDE_SHARING_REQUEST",
       { requestId, decision },
       {
-        actorNameAr: "م. محمود هاشم (eng.mhashim@gmail.com)",
-        actorRoleAr: "SUPER_ADMIN",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode:
-          decision === "APPROVED" ? "DATA_SHARING_GRANTED" : "DATA_SHARING_DENIED",
+          decision === "APPROVED"
+            ? "DATA_SHARING_GRANTED"
+            : "DATA_SHARING_DENIED",
         descriptionAr: `${
           decision === "APPROVED" ? "الموافقة على" : "رفض"
         } طلب مشاركة ملف المستفيد (${req.beneficiaryNameAr}) لصالح (${
@@ -222,16 +294,18 @@ export default function SanadDynamicPlatformPage() {
         tenantNameAr: req.owningTenantNameAr,
       }
     );
-    notify(
-      decision === "APPROVED"
-        ? "تمت الموافقة على مشاركة البيانات المحددة وتحديث قاعدة البيانات."
-        : "تم رفض طلب مشاركة البيانات حفاظاً على الخصوصية.",
-      decision === "APPROVED" ? "success" : "warning"
-    );
+    if (ok) {
+      notify(
+        decision === "APPROVED"
+          ? "تمت الموافقة على مشاركة البيانات المحددة وتحديث قاعدة البيانات."
+          : "تم رفض طلب مشاركة البيانات حفاظاً على الخصوصية.",
+        decision === "APPROVED" ? "success" : "warning"
+      );
+    }
   };
 
   // Association & Individual Initiative Handlers
-  const handleCreateCase = (payload: {
+  const handleCreateCase = async (payload: {
     tenantId: string;
     beneficiaryNameAr: string;
     nationalId: string;
@@ -245,28 +319,26 @@ export default function SanadDynamicPlatformPage() {
     const prefix = tenant?.type === "INDIVIDUAL" ? "IND" : "CASE";
     const caseNumber = `${prefix}-2026-${Date.now().toString().slice(-4)}`;
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "CREATE_CASE",
       { ...payload, caseNumber },
       {
-        actorNameAr:
-          tenant?.type === "INDIVIDUAL"
-            ? "سارة عبد الرحمن المنصوري"
-            : "أحمد محمود الشناوي",
-        actorRoleAr:
-          tenant?.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "CASE_CREATED_NID_VERIFIED",
         descriptionAr: `تسجيل حالة جديدة (${caseNumber}) للمستفيد (${payload.beneficiaryNameAr}) بعد فحص الرقم القومي`,
-        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
+        tenantNameAr: tenant?.nameAr || sessionUser?.tenantNameAr || "الجهة الخيرية",
       }
     );
-    notify(
-      `تم تسجيل ملف الحالة (${caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL.`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم تسجيل ملف الحالة (${caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL.`,
+        "success"
+      );
+    }
   };
 
-  const handleCreateDonation = (payload: {
+  const handleCreateDonation = async (payload: {
     tenantId: string;
     donorNameAr: string;
     donationType: "MONETARY" | "IN_KIND";
@@ -277,56 +349,57 @@ export default function SanadDynamicPlatformPage() {
     const tenant = tenants.find((t) => t.id === payload.tenantId) || tenants[0];
     const receiptNumber = `RCP-2026-${Date.now().toString().slice(-4)}`;
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "CREATE_DONATION",
       { ...payload, receiptNumber },
       {
-        actorNameAr:
-          tenant?.type === "INDIVIDUAL"
-            ? "سارة عبد الرحمن المنصوري"
-            : "أحمد محمود الشناوي",
-        actorRoleAr:
-          tenant?.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "DONATION_RECORDED",
         descriptionAr: `إصدار إيصال تبرع (${receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
           "ar-EG"
         )} ج.م — الحالة: ${payload.initialStatus}`,
-        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
+        tenantNameAr: tenant?.nameAr || sessionUser?.tenantNameAr || "الجهة الخيرية",
       }
     );
-    notify(
-      `تم تسجيل التبرع (${receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
-        "ar-EG"
-      )} ج.م في قاعدة البيانات.`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم تسجيل التبرع (${receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
+          "ar-EG"
+        )} ج.م في قاعدة البيانات.`,
+        "success"
+      );
+    }
   };
 
-  const handleConfirmDonation = (donationId: string) => {
+  const handleConfirmDonation = async (donationId: string) => {
     const targetDon = donations.find((d) => d.id === donationId);
     if (!targetDon || targetDon.status !== "PENDING_VERIFICATION") return;
-    const tenant = tenants.find((t) => t.id === targetDon.tenantId) || tenants[0];
+    const tenant =
+      tenants.find((t) => t.id === targetDon.tenantId) || tenants[0];
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "CONFIRM_DONATION",
       { donationId },
       {
-        actorNameAr: "أحمد محمود الشناوي",
-        actorRoleAr: "مدير جمعية خيرية",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "DONATION_CONFIRMED",
         descriptionAr: `تأكيد استلام التبرع (${targetDon.receiptNumber}) وإضافة ${targetDon.totalAmountEgp.toLocaleString(
           "ar-EG"
         )} ج.م للرصيد المتاح للتخصيص`,
-        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
+        tenantNameAr: tenant?.nameAr || sessionUser?.tenantNameAr || "الجهة الخيرية",
       }
     );
-    notify(
-      `تم تأكيد استلام التبرع (${targetDon.receiptNumber}) وإضافة المبلغ للرصيد المتاح في قاعدة البيانات!`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم تأكيد استلام التبرع (${targetDon.receiptNumber}) وإضافة المبلغ للرصيد المتاح في قاعدة البيانات!`,
+        "success"
+      );
+    }
   };
 
-  const handleAllocateAtomic = (payload: {
+  const handleAllocateAtomic = async (payload: {
     donationId: string;
     caseId: string;
     amountEgp: number;
@@ -346,38 +419,37 @@ export default function SanadDynamicPlatformPage() {
       return;
     }
 
-    const tenant = tenants.find((t) => t.id === donation.tenantId) || tenants[0];
+    const tenant =
+      tenants.find((t) => t.id === donation.tenantId) || tenants[0];
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "ALLOCATE_ATOMIC",
       payload,
       {
-        actorNameAr:
-          tenant?.type === "INDIVIDUAL"
-            ? "سارة عبد الرحمن المنصوري"
-            : "أحمد محمود الشناوي",
-        actorRoleAr:
-          tenant?.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "ALLOCATION_RESERVED_ATOMIC",
         descriptionAr: `تخصيص ذري لمبلغ ${payload.amountEgp.toLocaleString(
           "ar-EG"
         )} ج.م من الإيصال ${donation.receiptNumber} للحالة ${
           targetCase.caseNumber
         } وجدولة التسليم`,
-        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
+        tenantNameAr: tenant?.nameAr || sessionUser?.tenantNameAr || "الجهة الخيرية",
       }
     );
 
-    notify(
-      `تم الحجز المالي الذري بمبلغ ${payload.amountEgp.toLocaleString(
-        "ar-EG"
-      )} ج.م للحالة (${targetCase.caseNumber}) في قاعدة البيانات!`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم الحجز المالي الذري بمبلغ ${payload.amountEgp.toLocaleString(
+          "ar-EG"
+        )} ج.م للحالة (${targetCase.caseNumber}) في قاعدة البيانات!`,
+        "success"
+      );
+    }
   };
 
   // Research Supervisor Handlers
-  const handleAssignVolunteer = (
+  const handleAssignVolunteer = async (
     caseId: string,
     volunteerId: string,
     volunteerNameAr: string
@@ -385,24 +457,26 @@ export default function SanadDynamicPlatformPage() {
     const target = cases.find((c) => c.id === caseId);
     if (!target) return;
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "ASSIGN_VOLUNTEER",
       { caseId, volunteerId, volunteerNameAr },
       {
-        actorNameAr: "د. منى الشاذلي",
-        actorRoleAr: "مشرف البحث الاجتماعي",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "RESEARCH_ASSIGNED",
         descriptionAr: `إسناد الزيارة الميدانية للحالة (${target.caseNumber}) إلى الباحث (${volunteerNameAr})`,
         tenantNameAr: "إدارة البحث الاجتماعي",
       }
     );
-    notify(
-      `تم إسناد الزيارة الميدانية للحالة (${target.caseNumber}) إلى الباحث ${volunteerNameAr}.`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم إسناد الزيارة الميدانية للحالة (${target.caseNumber}) إلى الباحث ${volunteerNameAr}.`,
+        "success"
+      );
+    }
   };
 
-  const handleReviewDecision = (
+  const handleReviewDecision = async (
     caseId: string,
     decision: EligibilityDecision | "NEEDS_REVISION",
     simulateSelfApproval = false
@@ -414,16 +488,16 @@ export default function SanadDynamicPlatformPage() {
       reviewerRole: "RESEARCH_SUPERVISOR",
       reviewerUserId: simulateSelfApproval
         ? target.assignedVolunteerId || "same-user-id"
-        : "user-sup-mona",
+        : sessionUser?.userId || "user-sup-mona",
       authorUserId: target.assignedVolunteerId || "same-user-id",
     });
 
     if (!sodCheck.allowed) {
-      void executeLiveAction(
+      await executeLiveAction(
         "SOD_VIOLATION_BLOCKED",
         { caseId },
         {
-          actorNameAr: target.assignedVolunteerAr,
+          actorNameAr: actorDisplayName,
           actorRoleAr: "محاولة اعتماد ذاتي",
           actionCode: sodCheck.ruleCode,
           descriptionAr: sodCheck.reasonAr,
@@ -434,17 +508,19 @@ export default function SanadDynamicPlatformPage() {
       return;
     }
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "REVIEW_DECISION",
       { caseId, decision },
       {
-        actorNameAr: "د. منى الشاذلي",
-        actorRoleAr: "مشرف البحث الاجتماعي",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: `ELIGIBILITY_${decision}`,
         descriptionAr: `إصدار قرار الأهلية (${decision}) للحالة (${target.caseNumber}) بعد التحقق من فصل المهام`,
         tenantNameAr: "إدارة البحث الاجتماعي",
       }
     );
+
+    if (!ok) return;
 
     if (decision === "NEEDS_REVISION") {
       notify(
@@ -461,7 +537,7 @@ export default function SanadDynamicPlatformPage() {
   };
 
   // Volunteer Handlers
-  const handleSubmitFieldReport = (payload: {
+  const handleSubmitFieldReport = async (payload: {
     caseId: string;
     incomeEgp: number;
     expensesEgp: number;
@@ -471,57 +547,61 @@ export default function SanadDynamicPlatformPage() {
     if (!target) return;
     const nextVersion = target.reportVersion + 1;
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "SUBMIT_FIELD_REPORT",
       payload,
       {
-        actorNameAr: target.assignedVolunteerAr || "أحمد سامي الكيلاني",
-        actorRoleAr: "باحث / متطوع ميداني",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "FIELD_REPORT_SUBMITTED",
         descriptionAr: `رفع تقرير البحث الميداني (الإصدار v${nextVersion}) للحالة (${target.caseNumber}) للمراجعة`,
         tenantNameAr: "وحدة العمل الميداني",
       }
     );
-    notify(
-      `تم إرسال تقرير البحث الميداني (الإصدار v${nextVersion}) للحالة (${target.caseNumber}) وحفظه في قاعدة البيانات.`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم إرسال تقرير البحث الميداني (الإصدار v${nextVersion}) للحالة (${target.caseNumber}) وحفظه في قاعدة البيانات.`,
+        "success"
+      );
+    }
   };
 
-  const handleConfirmDelivery = (deliveryId: string) => {
+  const handleConfirmDelivery = async (deliveryId: string) => {
     const targetDeliv = deliveries.find((d) => d.id === deliveryId);
     if (!targetDeliv || targetDeliv.status === "CONFIRMED") return;
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "CONFIRM_DELIVERY",
       { deliveryId },
       {
-        actorNameAr: targetDeliv.assignedVolunteerAr,
-        actorRoleAr: "باحث / متطوع ميداني",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "DELIVERY_CONFIRMED_IDEMPOTENT",
         descriptionAr: `تأكيد التسليم الفعلي للحالة (${targetDeliv.caseNumber}) بمفتاح عدم تكرار (${targetDeliv.idempotencyKey})`,
         tenantNameAr: "وحدة تسليم المساعدات",
       }
     );
-    notify(
-      `تم تأكيد وتوثيق التسليم الفعلي للحالة (${targetDeliv.caseNumber}) في قاعدة البيانات.`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم تأكيد وتوثيق التسليم الفعلي للحالة (${targetDeliv.caseNumber}) في قاعدة البيانات.`,
+        "success"
+      );
+    }
   };
 
-  const handleVolunteerAttemptDirectApproval = () => {
+  const handleVolunteerAttemptDirectApproval = async () => {
     const check = canApproveResearchReport({
       reviewerRole: "VOLUNTEER",
-      reviewerUserId: "user-vol-ahmed",
+      reviewerUserId: sessionUser?.userId || "user-vol-ahmed",
       authorUserId: "user-vol-sara",
     });
     notify(check.reasonAr, "error");
-    void executeLiveAction(
+    await executeLiveAction(
       "SOD_VOLUNTEER_BLOCKED",
       {},
       {
-        actorNameAr: "أحمد سامي الكيلاني",
-        actorRoleAr: "باحث / متطوع ميداني",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: check.ruleCode,
         descriptionAr: check.reasonAr,
         tenantNameAr: "محرك فصل المهام الرقابية (SoD Guard)",
@@ -530,7 +610,7 @@ export default function SanadDynamicPlatformPage() {
   };
 
   // Beneficiary Portal Handlers
-  const handleSubmitBeneficiaryRequest = (payload: {
+  const handleSubmitBeneficiaryRequest = async (payload: {
     tenantId: string;
     category: AidCategoryCode;
     requestedEgp: number;
@@ -539,19 +619,20 @@ export default function SanadDynamicPlatformPage() {
     const tenant = tenants.find((t) => t.id === payload.tenantId) || tenants[0];
     const caseNumber = `REQ-2026-${Date.now().toString().slice(-4)}`;
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "SUBMIT_BENEFICIARY_REQUEST",
       {
         ...payload,
         caseNumber,
-        beneficiaryNameAr: "فاطمة عبد الفتاح السيد",
+        beneficiaryNameAr: sessionUser?.fullNameAr || "مستفيد موثق",
         nationalId: "27905151601234",
-        phoneE164: "+201233344455",
-        governorate: tenant?.governorate || "الغربية",
+        phoneE164: sessionUser?.phoneE164 || "+201233344455",
+        governorate:
+          sessionUser?.governorateNameAr || tenant?.governorate || "القاهرة",
       },
       {
-        actorNameAr: "فاطمة عبد الفتاح السيد",
-        actorRoleAr: "مستفيد (BENEFICIARY)",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: "SELF_SERVICE_REQUEST_CREATED",
         descriptionAr: `تقديم طلب مساعدة ذاتي (${caseNumber}) لدى (${
           tenant?.nameAr || "الجهة الخيرية"
@@ -559,23 +640,25 @@ export default function SanadDynamicPlatformPage() {
         tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
       }
     );
-    notify(
-      `تم إرسال طلب المساعدة (${caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL بنجاح!`,
-      "success"
-    );
+    if (ok) {
+      notify(
+        `تم إرسال طلب المساعدة (${caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL بنجاح!`,
+        "success"
+      );
+    }
   };
 
-  const handleToggleConsent = (consentId: string) => {
+  const handleToggleConsent = async (consentId: string) => {
     const target = consents.find((c) => c.id === consentId);
     if (!target) return;
     const nextState = !target.granted;
 
-    void executeLiveAction(
+    const ok = await executeLiveAction(
       "TOGGLE_CONSENT",
       { consentId },
       {
-        actorNameAr: "فاطمة عبد الفتاح السيد",
-        actorRoleAr: "مستفيد (BENEFICIARY)",
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
         actionCode: nextState ? "CONSENT_GRANTED" : "CONSENT_REVOKED",
         descriptionAr: `${nextState ? "منح" : "إلغاء"} موافقة الخصوصية (${
           target.scopeCode
@@ -583,12 +666,14 @@ export default function SanadDynamicPlatformPage() {
         tenantNameAr: "بوابة المستفيد الذاتية",
       }
     );
-    notify(
-      nextState
-        ? `تم تفعيل الموافقة على: "${target.titleAr}"`
-        : `تم إلغاء الموافقة على: "${target.titleAr}"`,
-      nextState ? "success" : "warning"
-    );
+    if (ok) {
+      notify(
+        nextState
+          ? `تم تفعيل الموافقة على: "${target.titleAr}"`
+          : `تم إلغاء الموافقة على: "${target.titleAr}"`,
+        nextState ? "success" : "warning"
+      );
+    }
   };
 
   // Current active tenant calculation for Association / Individual views
@@ -619,6 +704,13 @@ export default function SanadDynamicPlatformPage() {
     tenants[0] ||
     { ...emptyFallbackTenant, type: "INDIVIDUAL" };
 
+  // Effective view is strictly locked to sessionUser.role unless the user is SUPER_ADMIN
+  const effectiveRoleView: TargetAuthRole = sessionUser
+    ? sessionUser.role === "SUPER_ADMIN"
+      ? activeView
+      : sessionUser.role
+    : "BENEFICIARY";
+
   return (
     <div dir="rtl" className="min-h-screen bg-slate-50 text-slate-900">
       {/* Main Navigation Header */}
@@ -629,37 +721,90 @@ export default function SanadDynamicPlatformPage() {
               س
             </div>
             <div>
-              <h1 className="font-bold text-lg text-slate-900">منصة سَنَد (SANAD)</h1>
+              <h1 className="font-bold text-lg text-slate-900">
+                منصة سَنَد (SANAD)
+              </h1>
               <p className="text-xs text-slate-500">
                 نظام إدارة الجمعيات الخيرية والمبادرات الفردية والبحث الاجتماعي الميداني
               </p>
             </div>
           </div>
 
-          <nav aria-label="تبديل الأدوار الوظيفية" className="flex flex-wrap items-center gap-1.5">
-            {[
-              { id: "SUPER_ADMIN", label: "مدير المنصة" },
-              { id: "ASSOCIATION_ADMIN", label: "مدير جمعية خيرية" },
-              { id: "INDIVIDUAL_INITIATIVE", label: "مبادر فردي مستقل" },
-              { id: "RESEARCH_SUPERVISOR", label: "مشرف البحث الاجتماعي" },
-              { id: "VOLUNTEER", label: "باحث / متطوع" },
-              { id: "BENEFICIARY", label: "بوابة المستفيد" },
-              { id: "AUTH_LOGIN_REGISTER", label: "الدخول والتسجيل" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveView(tab.id as ActiveRoleView)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  activeView === tab.id
-                    ? "bg-purple-700 text-white shadow-sm"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+          {/* Authenticated Session Bar vs Unauthenticated Lock Badge */}
+          {!sessionUser ? (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold">
+                <span>🔒</span>
+                <span>يرجى تسجيل الدخول للوصول إلى مساحات العمل</span>
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Super Admin Module Inspector (Strictly ONLY for authenticated SUPER_ADMIN) */}
+              {sessionUser.role === "SUPER_ADMIN" && (
+                <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-xl px-2.5 py-1">
+                  <span className="text-[11px] font-bold text-purple-900">
+                    وحدة العرض (صلاحية مدير المنصة):
+                  </span>
+                  <select
+                    aria-label="تبديل وحدة المنصة لمدير النظام"
+                    value={activeView}
+                    onChange={(e) =>
+                      setActiveView(e.target.value as TargetAuthRole)
+                    }
+                    className="bg-white border border-purple-300 rounded-lg px-2 py-1 text-xs font-bold text-purple-950 focus:outline-none"
+                  >
+                    <option value="SUPER_ADMIN">
+                      لوحة مدير المنصة المركزي (SUPER_ADMIN)
+                    </option>
+                    <option value="ASSOCIATION_ADMIN">
+                      معاينة وحدة الجمعيات الخيرية
+                    </option>
+                    <option value="INDIVIDUAL_INITIATIVE">
+                      معاينة وحدة المبادرات الفردية
+                    </option>
+                    <option value="RESEARCH_SUPERVISOR">
+                      معاينة وحدة مشرف البحث الاجتماعي
+                    </option>
+                    <option value="VOLUNTEER">
+                      معاينة وحدة الباحث الميداني
+                    </option>
+                    <option value="BENEFICIARY">
+                      معاينة بوابة المستفيد
+                    </option>
+                  </select>
+                </div>
+              )}
+
+              {/* Verified User Identity & Role Badge */}
+              <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+                <div className="text-right">
+                  <div className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                    <span>{sessionUser.fullNameAr}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 text-[11px] font-bold">
+                      {ROLE_LABELS_AR[sessionUser.role]}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono flex items-center gap-2">
+                    <span>{sessionUser.email}</span>
+                    <span>•</span>
+                    <span className="text-purple-700 font-sans font-semibold">
+                      {sessionUser.permissions.length} صلاحية مفعّلة
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-sm disabled:opacity-50"
+                >
+                  {signingOut ? "جاري الخروج..." : "تسجيل الخروج"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -692,113 +837,122 @@ export default function SanadDynamicPlatformPage() {
       {/* Main Dynamic Workspace Area */}
       <main
         className={
-          activeView === "AUTH_LOGIN_REGISTER"
+          !sessionUser
             ? "max-w-[1440px] mx-auto px-4 py-5"
             : "max-w-7xl mx-auto px-4 py-6 space-y-6"
         }
       >
-        {loadingDb && activeView !== "AUTH_LOGIN_REGISTER" && tenants.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm font-bold text-slate-600 shadow-sm">
-            جاري تحميل البيانات الحية من قاعدة البيانات...
+        {checkingAuth ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-sm font-bold text-slate-600 shadow-sm max-w-xl mx-auto my-12">
+            جاري التحقق من جلسة الأمان وصلاحيات الدخول...
           </div>
-        ) : null}
-
-        {activeView === "SUPER_ADMIN" && (
-          <SuperAdminWorkspace
-            tenants={tenants}
-            cases={cases}
-            sharingRequests={sharingRequests}
-            auditLogs={auditLogs}
-            onUpdateTenantStatus={handleUpdateTenantStatus}
-            onCreateTenant={handleCreateTenant}
-            onDecideSharingRequest={handleDecideSharingRequest}
-          />
-        )}
-
-        {activeView === "ASSOCIATION_ADMIN" && (
-          <TenantAdminWorkspace
-            mode="ASSOCIATION"
-            currentTenant={activeAssnTenant}
-            availableTenantsOfType={associationTenants}
-            onSelectTenantId={setSelectedAssnTenantId}
-            scopedCases={cases.filter((c) => c.tenantId === activeAssnTenant.id)}
-            scopedDonations={donations.filter(
-              (d) => d.tenantId === activeAssnTenant.id
-            )}
-            onCreateCase={handleCreateCase}
-            onCreateDonation={handleCreateDonation}
-            onConfirmDonation={handleConfirmDonation}
-            onAllocateAtomic={handleAllocateAtomic}
-          />
-        )}
-
-        {activeView === "INDIVIDUAL_INITIATIVE" && (
-          <TenantAdminWorkspace
-            mode="INDIVIDUAL"
-            currentTenant={activeIndTenant}
-            availableTenantsOfType={individualTenants}
-            onSelectTenantId={setSelectedIndTenantId}
-            scopedCases={cases.filter((c) => c.tenantId === activeIndTenant.id)}
-            scopedDonations={donations.filter(
-              (d) => d.tenantId === activeIndTenant.id
-            )}
-            onCreateCase={handleCreateCase}
-            onCreateDonation={handleCreateDonation}
-            onConfirmDonation={handleConfirmDonation}
-            onAllocateAtomic={handleAllocateAtomic}
-          />
-        )}
-
-        {activeView === "RESEARCH_SUPERVISOR" && (
-          <ResearchSupervisorWorkspace
-            cases={cases}
-            onAssignVolunteer={handleAssignVolunteer}
-            onReviewDecision={handleReviewDecision}
-          />
-        )}
-
-        {activeView === "VOLUNTEER" && (
-          <VolunteerWorkspace
-            cases={cases}
-            deliveries={deliveries}
-            onSubmitFieldReport={handleSubmitFieldReport}
-            onConfirmDelivery={handleConfirmDelivery}
-            onAttemptDirectApproval={handleVolunteerAttemptDirectApproval}
-          />
-        )}
-
-        {activeView === "BENEFICIARY" && (
-          <BeneficiaryPortalWorkspace
-            tenants={tenants}
-            cases={cases}
-            deliveries={deliveries}
-            consents={consents}
-            onSubmitBeneficiaryRequest={handleSubmitBeneficiaryRequest}
-            onToggleConsent={handleToggleConsent}
-          />
-        )}
-
-        {activeView === "AUTH_LOGIN_REGISTER" && (
+        ) : !sessionUser ? (
           <AuthNationalIdWorkspace
             onNotify={notify}
-            onAuthenticatedSuccess={(payload: {
-              fullNameAr: string;
-              email: string;
-              nationalId: string;
-              phoneE164: string;
-              governorateNameAr: string;
-              targetRole: TargetAuthRole;
-              mode: "LOGIN" | "REGISTER";
-              correlationId: string;
-            }) => {
+            onAuthenticatedSuccess={(payload) => {
+              setSessionUser(payload.user);
+              setActiveView(payload.user.role);
+              if (payload.user.tenantId) {
+                setSelectedAssnTenantId(payload.user.tenantId);
+                setSelectedIndTenantId(payload.user.tenantId);
+              }
               void fetchLiveDatabaseState();
               notify(
-                `مرحباً ${payload.fullNameAr}! تم توثيق الدخول (${payload.email}) وتفعيل جلسة (${payload.targetRole}).`,
+                `مرحباً ${payload.user.fullNameAr}! تم توثيق الدخول (${
+                  payload.user.email
+                }) وتفعيل صلاحيات (${ROLE_LABELS_AR[payload.user.role]}).`,
                 "success"
               );
-              setActiveView(payload.targetRole);
             }}
           />
+        ) : (
+          <>
+            {loadingDb && tenants.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm font-bold text-slate-600 shadow-sm">
+                جاري تحميل البيانات الحية من قاعدة البيانات وفقاً لصلاحيات دورك...
+              </div>
+            ) : null}
+
+            {effectiveRoleView === "SUPER_ADMIN" &&
+              sessionUser.role === "SUPER_ADMIN" && (
+                <SuperAdminWorkspace
+                  tenants={tenants}
+                  cases={cases}
+                  sharingRequests={sharingRequests}
+                  auditLogs={auditLogs}
+                  onUpdateTenantStatus={handleUpdateTenantStatus}
+                  onCreateTenant={handleCreateTenant}
+                  onDecideSharingRequest={handleDecideSharingRequest}
+                />
+              )}
+
+            {effectiveRoleView === "ASSOCIATION_ADMIN" && (
+              <TenantAdminWorkspace
+                mode="ASSOCIATION"
+                currentTenant={activeAssnTenant}
+                availableTenantsOfType={associationTenants}
+                onSelectTenantId={setSelectedAssnTenantId}
+                scopedCases={cases.filter(
+                  (c) => c.tenantId === activeAssnTenant.id
+                )}
+                scopedDonations={donations.filter(
+                  (d) => d.tenantId === activeAssnTenant.id
+                )}
+                onCreateCase={handleCreateCase}
+                onCreateDonation={handleCreateDonation}
+                onConfirmDonation={handleConfirmDonation}
+                onAllocateAtomic={handleAllocateAtomic}
+              />
+            )}
+
+            {effectiveRoleView === "INDIVIDUAL_INITIATIVE" && (
+              <TenantAdminWorkspace
+                mode="INDIVIDUAL"
+                currentTenant={activeIndTenant}
+                availableTenantsOfType={individualTenants}
+                onSelectTenantId={setSelectedIndTenantId}
+                scopedCases={cases.filter(
+                  (c) => c.tenantId === activeIndTenant.id
+                )}
+                scopedDonations={donations.filter(
+                  (d) => d.tenantId === activeIndTenant.id
+                )}
+                onCreateCase={handleCreateCase}
+                onCreateDonation={handleCreateDonation}
+                onConfirmDonation={handleConfirmDonation}
+                onAllocateAtomic={handleAllocateAtomic}
+              />
+            )}
+
+            {effectiveRoleView === "RESEARCH_SUPERVISOR" && (
+              <ResearchSupervisorWorkspace
+                cases={cases}
+                onAssignVolunteer={handleAssignVolunteer}
+                onReviewDecision={handleReviewDecision}
+              />
+            )}
+
+            {effectiveRoleView === "VOLUNTEER" && (
+              <VolunteerWorkspace
+                cases={cases}
+                deliveries={deliveries}
+                onSubmitFieldReport={handleSubmitFieldReport}
+                onConfirmDelivery={handleConfirmDelivery}
+                onAttemptDirectApproval={handleVolunteerAttemptDirectApproval}
+              />
+            )}
+
+            {effectiveRoleView === "BENEFICIARY" && (
+              <BeneficiaryPortalWorkspace
+                tenants={tenants}
+                cases={cases}
+                deliveries={deliveries}
+                consents={consents}
+                onSubmitBeneficiaryRequest={handleSubmitBeneficiaryRequest}
+                onToggleConsent={handleToggleConsent}
+              />
+            )}
+          </>
         )}
       </main>
     </div>

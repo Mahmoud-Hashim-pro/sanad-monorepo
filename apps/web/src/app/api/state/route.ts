@@ -14,9 +14,29 @@ import {
   type TenantStatus,
 } from "../../../lib/mock-data/fictional-seed";
 import { maskEgyptianNationalId } from "../../../lib/domain/sanad-rules";
+import {
+  getServerSession,
+  hasPermission,
+} from "../../../lib/server/auth-session";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const ACTION_REQUIRED_PERMISSIONS: Record<string, string> = {
+  UPDATE_TENANT_STATUS: "platform:tenants:approve",
+  CREATE_TENANT: "platform:tenants:approve",
+  DECIDE_SHARING_REQUEST: "platform:tenants:approve",
+  CREATE_CASE: "tenant:cases:manage",
+  CREATE_DONATION: "tenant:donations:manage",
+  CONFIRM_DONATION: "tenant:donations:manage",
+  ALLOCATE_ATOMIC: "tenant:allocations:create",
+  ASSIGN_VOLUNTEER: "tenant:research:assign",
+  REVIEW_DECISION: "tenant:research:review",
+  SUBMIT_FIELD_REPORT: "tenant:research:submit_report",
+  CONFIRM_DELIVERY: "tenant:deliveries:confirm_assigned",
+  SUBMIT_BENEFICIARY_REQUEST: "portal:requests:create_own",
+  TOGGLE_CONSENT: "portal:profile:manage_own",
+};
 
 function mapDbCategoryToFrontend(cat?: string | null): AidCategoryCode {
   switch (cat) {
@@ -54,6 +74,18 @@ function mapFrontendCategoryToDb(cat?: string) {
 }
 
 export async function GET() {
+  const session = getServerSession();
+  if (!session) {
+    return NextResponse.json(
+      {
+        ok: false,
+        authenticated: false,
+        errorAr: "غير مصرح بالوصول؛ يجب تسجيل الدخول أولاً.",
+      },
+      { status: 401 }
+    );
+  }
+
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
       { ok: false, source: "no_database_url" },
@@ -385,13 +417,35 @@ export async function GET() {
       };
     });
 
+    const isTenantScopedRole =
+      (session.role === "ASSOCIATION_ADMIN" ||
+        session.role === "INDIVIDUAL_INITIATIVE") &&
+      Boolean(session.tenantId);
+
+    const scopedTenants = isTenantScopedRole
+      ? tenants.filter((t) => t.id === session.tenantId)
+      : tenants;
+
+    const scopedCases = isTenantScopedRole
+      ? cases.filter((c) => c.tenantId === session.tenantId)
+      : cases;
+
+    const scopedDonations = isTenantScopedRole
+      ? donations.filter((d) => d.tenantId === session.tenantId)
+      : donations;
+
+    const scopedDeliveries = isTenantScopedRole
+      ? deliveries.filter((d) => d.tenantId === session.tenantId)
+      : deliveries;
+
     return NextResponse.json({
       ok: true,
       source: "neon_postgresql",
-      tenants,
-      cases,
-      donations,
-      deliveries,
+      sessionRole: session.role,
+      tenants: scopedTenants.length > 0 ? scopedTenants : tenants,
+      cases: scopedCases,
+      donations: scopedDonations,
+      deliveries: scopedDeliveries,
       sharingRequests,
       consents,
       auditLogs,
@@ -410,6 +464,18 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const session = getServerSession();
+  if (!session) {
+    return NextResponse.json(
+      {
+        ok: false,
+        authenticated: false,
+        errorAr: "غير مصرح بتنفيذ الإجراء؛ يرجى تسجيل الدخول أولاً.",
+      },
+      { status: 401 }
+    );
+  }
+
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({ ok: false, persisted: false }, { status: 503 });
   }
@@ -422,6 +488,34 @@ export async function POST(request: Request) {
 
     const action = body.action;
     const p = body.payload || {};
+
+    const requiredPerm = ACTION_REQUIRED_PERMISSIONS[action];
+    if (requiredPerm && !hasPermission(session, requiredPerm)) {
+      await prisma.auditLog.create({
+        data: {
+          actorUserId: session.userId,
+          tenantId: session.tenantId,
+          actionCode: "RBAC_PERMISSION_DENIED",
+          resourceType: "PlatformState",
+          metadataJson: {
+            actorNameAr: session.fullNameAr,
+            role: session.role,
+            attemptedAction: action,
+            requiredPermission: requiredPerm,
+            descriptionAr: `رفض محاولة تنفيذ إجراء (${action}) لعدم توفر الصلاحية (${requiredPerm}) لدور (${session.role})`,
+            tenantNameAr: session.tenantNameAr || "حارس الصلاحيات الأمني (RBAC Guard)",
+          },
+        },
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          persisted: false,
+          errorAr: `غير مصرح لدورك الوظيفي (${session.role}) بتنفيذ هذا الإجراء (الصلاحية المطلوبة: ${requiredPerm}).`,
+        },
+        { status: 403 }
+      );
+    }
 
     if (action === "UPDATE_TENANT_STATUS") {
       const tenantId = String(p.tenantId || "");
@@ -819,13 +913,18 @@ export async function POST(request: Request) {
       const audit = p.audit as Record<string, string>;
       await prisma.auditLog.create({
         data: {
+          actorUserId: session.userId,
+          tenantId: session.tenantId,
           actionCode: audit.actionCode || action,
           resourceType: "PlatformState",
           metadataJson: {
-            actorNameAr: audit.actorNameAr,
-            role: audit.actorRoleAr,
+            actorNameAr: session.fullNameAr,
+            role: session.role,
             descriptionAr: audit.descriptionAr,
-            tenantNameAr: audit.tenantNameAr,
+            tenantNameAr:
+              session.tenantNameAr ||
+              audit.tenantNameAr ||
+              "منصة سَنَد المركزية",
           },
         },
       });
