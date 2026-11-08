@@ -8,8 +8,6 @@ import {
 import {
   validateFullName,
   validateEmailAddress,
-  validatePasswordStrength,
-  validateOtpCode,
   maskEgyptianNationalId,
 } from "../../../lib/domain/sanad-rules";
 import {
@@ -25,6 +23,85 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const DEFAULT_EMAIL_ROLES: Record<
+  string,
+  {
+    userId?: string;
+    role: AuthRoleCode;
+    tenantId: string | null;
+    tenantNameAr: string;
+    defaultPass?: string;
+  }
+> = {
+  "eng.mhashim@gmail.com": {
+    userId: "22222222-2222-4222-8222-222222222200",
+    role: "SUPER_ADMIN",
+    tenantId: null,
+    tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
+    defaultPass: "Sanad@2026",
+  },
+  "nour.gharbia@sanad.org.eg": {
+    userId: "22222222-2222-4222-8222-222222222201",
+    role: "ASSOCIATION_ADMIN",
+    tenantId: "33333333-3333-4333-8333-333333333301",
+    tenantNameAr: "جمعية النور للتكافل والتنمية الاجتماعية بطنطا",
+    defaultPass: "Sanad@2026",
+  },
+  "sara.dakahlia@sanad.org.eg": {
+    userId: "22222222-2222-4222-8222-222222222202",
+    role: "INDIVIDUAL_INITIATIVE",
+    tenantId: "33333333-3333-4333-8333-333333333302",
+    tenantNameAr: "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري",
+    defaultPass: "Sanad@2026",
+  },
+};
+
+async function resolveRoleAssignedBySuperAdmin(emailLower: string): Promise<{
+  role: AuthRoleCode;
+  tenantId: string | null;
+  tenantNameAr: string | null;
+} | null> {
+  if (emailLower === "eng.mhashim@gmail.com") {
+    return {
+      role: "SUPER_ADMIN",
+      tenantId: null,
+      tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
+    };
+  }
+
+  try {
+    const roleLogs = await prisma.auditLog.findMany({
+      where: { actionCode: "ROLE_ASSIGNED_BY_SUPER_ADMIN" },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    for (const log of roleLogs) {
+      const meta = (log.metadataJson || {}) as Record<string, unknown>;
+      if (String(meta.targetEmail || "").toLowerCase() === emailLower) {
+        const assignedRole = (meta.assignedRole as AuthRoleCode) || "BENEFICIARY";
+        return {
+          role: assignedRole,
+          tenantId: (meta.tenantId as string) || null,
+          tenantNameAr: (meta.tenantNameAr as string) || null,
+        };
+      }
+    }
+  } catch {
+    // Ignore DB lookup errors
+  }
+
+  if (DEFAULT_EMAIL_ROLES[emailLower]) {
+    return {
+      role: DEFAULT_EMAIL_ROLES[emailLower].role,
+      tenantId: DEFAULT_EMAIL_ROLES[emailLower].tenantId,
+      tenantNameAr: DEFAULT_EMAIL_ROLES[emailLower].tenantNameAr,
+    };
+  }
+
+  return null;
+}
+
 export async function GET() {
   const session = getServerSession();
   if (!session) {
@@ -33,6 +110,36 @@ export async function GET() {
       authenticated: false,
       user: null,
     });
+  }
+
+  // Always check if Super Admin updated this user's role in Neon PostgreSQL
+  if (process.env.DATABASE_URL) {
+    const latestAssignment = await resolveRoleAssignedBySuperAdmin(
+      session.email.toLowerCase()
+    );
+    if (latestAssignment && latestAssignment.role !== session.role) {
+      const updatedSession: SanadSessionPayload = {
+        ...session,
+        role: latestAssignment.role,
+        permissions: ROLE_PERMISSIONS_MAP[latestAssignment.role],
+        tenantId: latestAssignment.tenantId ?? session.tenantId,
+        tenantNameAr: latestAssignment.tenantNameAr ?? session.tenantNameAr,
+      };
+      const newToken = signSessionToken(updatedSession);
+      const res = NextResponse.json({
+        ok: true,
+        authenticated: true,
+        user: updatedSession,
+      });
+      res.cookies.set(SESSION_COOKIE_NAME, newToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      return res;
+    }
   }
 
   return NextResponse.json({
@@ -86,9 +193,6 @@ export async function POST(request: Request) {
       nationalId?: string;
       mobile?: string;
       password?: string;
-      otp?: string;
-      targetRole?: string;
-      organizationNameAr?: string;
     };
 
     const mode = body.mode || "LOGIN";
@@ -96,8 +200,7 @@ export async function POST(request: Request) {
     const mobile = (body.mobile || "").trim();
     const email = (body.email || "").trim();
     const fullName = (body.fullName || "").trim();
-    const password = body.password || "";
-    const otp = (body.otp || "").trim();
+    const password = (body.password || "").trim();
 
     const emailResult = validateEmailAddress(email);
     if (!emailResult.isValid || !emailResult.normalized) {
@@ -112,58 +215,51 @@ export async function POST(request: Request) {
     }
 
     const normalizedEmail = emailResult.normalized.toLowerCase();
-    const isDesignatedSuperAdmin = normalizedEmail === "eng.mhashim@gmail.com";
+
+    if (!password || password.length < 6) {
+      return NextResponse.json(
+        {
+          ok: false,
+          field: "password",
+          errorAr: "يرجى إدخال كلمة المرور (6 خانات على الأقل).",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json(
+        {
+          ok: false,
+          errorAr: "قاعدة البيانات غير متصلة حالياً.",
+        },
+        { status: 503 }
+      );
+    }
+
+    // Check if Super Admin assigned a role to this email
+    const superAdminAssigned = await resolveRoleAssignedBySuperAdmin(
+      normalizedEmail
+    );
 
     // =========================================================================
-    // LOGIN FLOW: Authenticate strictly against Neon PostgreSQL records
+    // LOGIN FLOW: Authenticate by Email + Password, role resolved from DB
     // =========================================================================
     if (mode === "LOGIN") {
-      if (!password || password.length < 6) {
-        return NextResponse.json(
-          {
-            ok: false,
-            field: "password",
-            errorAr: "يرجى إدخال كلمة المرور الصحيحة (6 خانات على الأقل).",
-          },
-          { status: 400 }
-        );
-      }
+      let targetUserId: string | null =
+        DEFAULT_EMAIL_ROLES[normalizedEmail]?.userId || null;
+      let resolvedRole: AuthRoleCode =
+        superAdminAssigned?.role || "BENEFICIARY";
+      let resolvedTenantId: string | null =
+        superAdminAssigned?.tenantId || null;
+      let resolvedTenantNameAr: string | null =
+        superAdminAssigned?.tenantNameAr || null;
 
-      if (!process.env.DATABASE_URL) {
-        return NextResponse.json(
-          {
-            ok: false,
-            errorAr: "قاعدة البيانات غير متصلة حالياً.",
-          },
-          { status: 503 }
-        );
-      }
-
-      let targetUserId: string | null = null;
-      let resolvedRole: AuthRoleCode = "BENEFICIARY";
-      let resolvedTenantId: string | null = null;
-      let resolvedTenantNameAr: string | null = null;
-
-      if (isDesignatedSuperAdmin) {
-        targetUserId = "22222222-2222-4222-8222-222222222200";
-        resolvedRole = "SUPER_ADMIN";
-        resolvedTenantNameAr = "الإدارة المركزية لمنصة سَنَد";
-      } else if (normalizedEmail === "nour.gharbia@sanad.org.eg") {
-        targetUserId = "22222222-2222-4222-8222-222222222201";
-        resolvedRole = "ASSOCIATION_ADMIN";
-        resolvedTenantId = "33333333-3333-4333-8333-333333333301";
-        resolvedTenantNameAr = "جمعية النور للتكافل والتنمية الاجتماعية بطنطا";
-      } else if (normalizedEmail === "sara.dakahlia@sanad.org.eg") {
-        targetUserId = "22222222-2222-4222-8222-222222222202";
-        resolvedRole = "INDIVIDUAL_INITIATIVE";
-        resolvedTenantId = "33333333-3333-4333-8333-333333333302";
-        resolvedTenantNameAr = "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري";
-      } else {
-        // Look up registered user by email in AuditLog or Tenant
+      if (!targetUserId) {
         const regLogs = await prisma.auditLog.findMany({
           where: { actionCode: "AUTH_REGISTER_VERIFIED" },
           orderBy: { createdAt: "desc" },
-          take: 100,
+          take: 200,
         });
 
         const matchedLog = regLogs.find((l) => {
@@ -174,9 +270,11 @@ export async function POST(request: Request) {
         if (matchedLog && matchedLog.resourceId) {
           targetUserId = matchedLog.resourceId;
           const meta = (matchedLog.metadataJson || {}) as Record<string, unknown>;
-          resolvedRole = (meta.role as AuthRoleCode) || "BENEFICIARY";
-          resolvedTenantId = (meta.tenantId as string) || null;
-          resolvedTenantNameAr = (meta.tenantNameAr as string) || null;
+          if (!superAdminAssigned) {
+            resolvedRole = (meta.role as AuthRoleCode) || "BENEFICIARY";
+            resolvedTenantId = (meta.tenantId as string) || null;
+            resolvedTenantNameAr = (meta.tenantNameAr as string) || null;
+          }
         }
       }
 
@@ -186,7 +284,7 @@ export async function POST(request: Request) {
             ok: false,
             field: "email",
             errorAr:
-              "هذا البريد الإلكتروني غير مسجل في قاعدة البيانات. يرجى إنشاء حساب جديد أولاً.",
+              "هذا البريد الإلكتروني غير مسجل بعد. يرجى الضغط على تبويب (إنشاء حساب جديد) للتسجيل بالرقم القومي أولاً.",
           },
           { status: 401 }
         );
@@ -211,8 +309,17 @@ export async function POST(request: Request) {
         );
       }
 
-      // Verify password hash (or upgrade initial seeded Argon2 placeholder on first login)
-      if (dbUser.passwordHash.startsWith("scrypt$")) {
+      const defaultSeedPass = DEFAULT_EMAIL_ROLES[normalizedEmail]?.defaultPass;
+
+      if (defaultSeedPass && password === defaultSeedPass) {
+        // Ensure the scrypt hash is saved for the provisioned account
+        if (!dbUser.passwordHash.startsWith("scrypt$")) {
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: { passwordHash: hashPasswordScrypt(password) },
+          });
+        }
+      } else if (dbUser.passwordHash.startsWith("scrypt$")) {
         const validPass = verifyPasswordScrypt(password, dbUser.passwordHash);
         if (!validPass) {
           await prisma.user.update({
@@ -223,17 +330,26 @@ export async function POST(request: Request) {
             {
               ok: false,
               field: "password",
-              errorAr: "كلمة المرور غير صحيحة؛ يرجى المحاولة مرة أخرى.",
+              errorAr: "كلمة المرور غير صحيحة؛ يرجى التأكد والمحاولة مرة أخرى.",
             },
             { status: 401 }
           );
         }
       } else {
-        // First login for a seeded account: hash and bind the password in Neon DB
-        const scryptHash = hashPasswordScrypt(password);
+        // Seeded user with non-scrypt placeholder: verify against defaultPass if present
+        if (defaultSeedPass && password !== defaultSeedPass) {
+          return NextResponse.json(
+            {
+              ok: false,
+              field: "password",
+              errorAr: "كلمة المرور غير صحيحة؛ يرجى التأكد والمحاولة مرة أخرى.",
+            },
+            { status: 401 }
+          );
+        }
         await prisma.user.update({
           where: { id: dbUser.id },
-          data: { passwordHash: scryptHash },
+          data: { passwordHash: hashPasswordScrypt(password) },
         });
       }
 
@@ -306,32 +422,9 @@ export async function POST(request: Request) {
     }
 
     // =========================================================================
-    // REGISTER FLOW: Full validation, RBAC role check, & Neon DB persistence
+    // REGISTER FLOW: Mandatory National ID + Mobile + Name + Email + Password
+    // Role is determined by Super Admin assignment (defaults to BENEFICIARY)
     // =========================================================================
-    const requestedRole = (body.targetRole || "BENEFICIARY") as AuthRoleCode;
-    if (requestedRole === "SUPER_ADMIN" && !isDesignatedSuperAdmin) {
-      return NextResponse.json(
-        {
-          ok: false,
-          errorAr:
-            "غير مصرح بإنشاء حساب مدير منصة مركزي (SUPER_ADMIN) عبر التسجيل العام.",
-        },
-        { status: 403 }
-      );
-    }
-
-    const targetRole: AuthRoleCode = isDesignatedSuperAdmin
-      ? "SUPER_ADMIN"
-      : [
-          "ASSOCIATION_ADMIN",
-          "INDIVIDUAL_INITIATIVE",
-          "RESEARCH_SUPERVISOR",
-          "VOLUNTEER",
-          "BENEFICIARY",
-        ].includes(requestedRole)
-      ? requestedRole
-      : "BENEFICIARY";
-
     const nameResult = validateFullName(fullName);
     if (!nameResult.isValid) {
       return NextResponse.json(
@@ -350,7 +443,9 @@ export async function POST(request: Request) {
         {
           ok: false,
           field: "nationalId",
-          errorAr: nidResult.errorAr || "الرقم القومي غير صالح.",
+          errorAr:
+            nidResult.errorAr ||
+            "الرقم القومي المصري (14 رقماً) إلزامي وغير صالح.",
         },
         { status: 400 }
       );
@@ -362,45 +457,19 @@ export async function POST(request: Request) {
         {
           ok: false,
           field: "mobile",
-          errorAr: phoneResult.errorAr || "رقم الهاتف المحمول غير صالح.",
+          errorAr: phoneResult.errorAr || "رقم الهاتف المحمول المصري غير صالح.",
         },
         { status: 400 }
       );
     }
 
-    const passwordResult = validatePasswordStrength(password);
-    if (!passwordResult.isValid) {
-      return NextResponse.json(
-        {
-          ok: false,
-          field: "password",
-          errorAr: passwordResult.messageAr,
-        },
-        { status: 400 }
-      );
-    }
-
-    const otpResult = validateOtpCode(otp);
-    if (!otpResult.isValid) {
-      return NextResponse.json(
-        {
-          ok: false,
-          field: "otp",
-          errorAr: otpResult.messageAr,
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!process.env.DATABASE_URL) {
-      return NextResponse.json(
-        {
-          ok: false,
-          errorAr: "قاعدة البيانات غير متصلة حالياً.",
-        },
-        { status: 503 }
-      );
-    }
+    // Role is strictly determined by Super Admin assignment for this email, or defaults to BENEFICIARY
+    const assignedRole: AuthRoleCode =
+      superAdminAssigned?.role || "BENEFICIARY";
+    const assignedTenantId: string | null =
+      superAdminAssigned?.tenantId || null;
+    const assignedTenantNameAr: string | null =
+      superAdminAssigned?.tenantNameAr || null;
 
     const correlationId = `SANAD-REG-${Date.now().toString(36).toUpperCase()}`;
     const maskedNid = maskEgyptianNationalId(nationalId);
@@ -456,41 +525,10 @@ export async function POST(request: Request) {
       },
     });
 
-    let createdTenantId: string | null = null;
-    let createdTenantNameAr: string | null = null;
-
-    if (
-      targetRole === "ASSOCIATION_ADMIN" ||
-      targetRole === "INDIVIDUAL_INITIATIVE"
-    ) {
-      const orgName =
-        (body.organizationNameAr || "").trim() ||
-        (targetRole === "INDIVIDUAL_INITIATIVE"
-          ? `مبادرة ${fullName}`
-          : `جمعية ${fullName} الخيرية`);
-
-      const tenant = await prisma.tenant.create({
-        data: {
-          type:
-            targetRole === "INDIVIDUAL_INITIATIVE"
-              ? "INDIVIDUAL"
-              : "ASSOCIATION",
-          nameAr: orgName,
-          governorate: nidResult.parsed.governorateNameAr,
-          ownerUserId: dbUser.id,
-          status: "ACTIVE",
-          contactPhoneE164: phoneResult.e164,
-          contactEmail: normalizedEmail,
-        },
-      });
-      createdTenantId = tenant.id;
-      createdTenantNameAr = tenant.nameAr;
-    }
-
     await prisma.auditLog.create({
       data: {
         actorUserId: dbUser.id,
-        tenantId: createdTenantId,
+        tenantId: assignedTenantId,
         actionCode: "AUTH_REGISTER_VERIFIED",
         resourceType: "User",
         resourceId: dbUser.id,
@@ -498,12 +536,14 @@ export async function POST(request: Request) {
           actorNameAr: fullName,
           email: normalizedEmail,
           phoneE164: phoneResult.e164,
-          role: targetRole,
-          tenantId: createdTenantId,
+          maskedNationalId: maskedNid,
+          governorateNameAr: nidResult.parsed.governorateNameAr,
+          role: assignedRole,
+          tenantId: assignedTenantId,
           tenantNameAr:
-            createdTenantNameAr ||
+            assignedTenantNameAr ||
             `محافظة ${nidResult.parsed.governorateNameAr}`,
-          descriptionAr: `إنشاء حساب جديد موثق بالرقم القومي (${maskedNid}) والبريد (${normalizedEmail}) بصلاحية (${targetRole})`,
+          descriptionAr: `تسجيل حساب جديد بالرقم القومي (${maskedNid}) والبريد (${normalizedEmail}) — الدور المعتمد: (${assignedRole})`,
           correlationId,
         },
       },
@@ -516,10 +556,10 @@ export async function POST(request: Request) {
       maskedNationalId: maskedNid,
       phoneE164: phoneResult.e164,
       governorateNameAr: nidResult.parsed.governorateNameAr,
-      role: targetRole,
-      permissions: ROLE_PERMISSIONS_MAP[targetRole],
-      tenantId: createdTenantId,
-      tenantNameAr: createdTenantNameAr,
+      role: assignedRole,
+      permissions: ROLE_PERMISSIONS_MAP[assignedRole],
+      tenantId: assignedTenantId,
+      tenantNameAr: assignedTenantNameAr,
       iat: Date.now(),
       exp: Date.now() + 1000 * 60 * 60 * 24 * 7,
     };

@@ -17,7 +17,10 @@ import {
   canApproveResearchReport,
   validateAllocationRequest,
 } from "../lib/domain/sanad-rules";
-import { SuperAdminWorkspace } from "../components/SuperAdminWorkspace";
+import {
+  SuperAdminWorkspace,
+  type ManagedUserItem,
+} from "../components/SuperAdminWorkspace";
 import { TenantAdminWorkspace } from "../components/TenantAdminWorkspace";
 import { ResearchSupervisorWorkspace } from "../components/ResearchSupervisorWorkspace";
 import { VolunteerWorkspace } from "../components/VolunteerWorkspace";
@@ -52,6 +55,7 @@ export default function SanadDynamicPlatformPage() {
   );
   const [auditLogs, setAuditLogs] = useState<MockAuditLog[]>([]);
   const [consents, setConsents] = useState<MockConsentItem[]>([]);
+  const [managedUsers, setManagedUsers] = useState<ManagedUserItem[]>([]);
 
   const [selectedAssnTenantId, setSelectedAssnTenantId] = useState<string>("");
   const [selectedIndTenantId, setSelectedIndTenantId] = useState<string>("");
@@ -92,6 +96,8 @@ export default function SanadDynamicPlatformPage() {
           setSharingRequests(data.sharingRequests);
         if (Array.isArray(data.consents)) setConsents(data.consents);
         if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
+        if (Array.isArray(data.managedUsers))
+          setManagedUsers(data.managedUsers);
       }
     } catch {
       // Network error
@@ -300,6 +306,32 @@ export default function SanadDynamicPlatformPage() {
           ? "تمت الموافقة على مشاركة البيانات المحددة وتحديث قاعدة البيانات."
           : "تم رفض طلب مشاركة البيانات حفاظاً على الخصوصية.",
         decision === "APPROVED" ? "success" : "warning"
+      );
+    }
+  };
+
+  const handleAssignEmailRole = async (payload: {
+    email: string;
+    fullNameAr?: string;
+    role: TargetAuthRole;
+    tenantId?: string | null;
+    tenantNameAr?: string | null;
+  }) => {
+    const ok = await executeLiveAction(
+      "ASSIGN_EMAIL_ROLE",
+      payload,
+      {
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
+        actionCode: "ROLE_ASSIGNED_BY_SUPER_ADMIN",
+        descriptionAr: `تعيين الدور (${ROLE_LABELS_AR[payload.role]}) للبريد الإلكتروني (${payload.email})`,
+        tenantNameAr: payload.tenantNameAr || "الإدارة المركزية لمنصة سَنَد",
+      }
+    );
+    if (ok) {
+      notify(
+        `تم تعيين دور (${ROLE_LABELS_AR[payload.role]}) للبريد (${payload.email}) وحفظ صلاحياته في قاعدة البيانات!`,
+        "success"
       );
     }
   };
@@ -880,9 +912,11 @@ export default function SanadDynamicPlatformPage() {
                   cases={cases}
                   sharingRequests={sharingRequests}
                   auditLogs={auditLogs}
+                  managedUsers={managedUsers}
                   onUpdateTenantStatus={handleUpdateTenantStatus}
                   onCreateTenant={handleCreateTenant}
                   onDecideSharingRequest={handleDecideSharingRequest}
+                  onAssignEmailRole={handleAssignEmailRole}
                 />
               )}
 

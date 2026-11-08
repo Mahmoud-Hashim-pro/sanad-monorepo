@@ -17,6 +17,8 @@ import { maskEgyptianNationalId } from "../../../lib/domain/sanad-rules";
 import {
   getServerSession,
   hasPermission,
+  ROLE_PERMISSIONS_MAP,
+  type AuthRoleCode,
 } from "../../../lib/server/auth-session";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,7 @@ const ACTION_REQUIRED_PERMISSIONS: Record<string, string> = {
   UPDATE_TENANT_STATUS: "platform:tenants:approve",
   CREATE_TENANT: "platform:tenants:approve",
   DECIDE_SHARING_REQUEST: "platform:tenants:approve",
+  ASSIGN_EMAIL_ROLE: "platform:tenants:approve",
   CREATE_CASE: "tenant:cases:manage",
   CREATE_DONATION: "tenant:donations:manage",
   CONFIRM_DONATION: "tenant:donations:manage",
@@ -438,6 +441,120 @@ export async function GET() {
       ? deliveries.filter((d) => d.tenantId === session.tenantId)
       : deliveries;
 
+    // Build managedUsers directory (provisioned accounts + registered accounts + Super Admin role assignments)
+    const allRoleLogs = await prisma.auditLog.findMany({
+      where: {
+        actionCode: {
+          in: ["AUTH_REGISTER_VERIFIED", "ROLE_ASSIGNED_BY_SUPER_ADMIN"],
+        },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 300,
+    });
+
+    const userByEmailMap = new Map<
+      string,
+      {
+        email: string;
+        fullNameAr: string;
+        maskedNationalId: string;
+        phoneE164: string;
+        role: AuthRoleCode;
+        tenantId: string | null;
+        tenantNameAr: string;
+        permissionsCount: number;
+        updatedAt: string;
+      }
+    >();
+
+    // Seed initial core accounts
+    userByEmailMap.set("eng.mhashim@gmail.com", {
+      email: "eng.mhashim@gmail.com",
+      fullNameAr: "م. محمود هاشم (مدير المنصة المركزي)",
+      maskedNationalId: "295010101****4",
+      phoneE164: "+201000000001",
+      role: "SUPER_ADMIN",
+      tenantId: null,
+      tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
+      permissionsCount: ROLE_PERMISSIONS_MAP.SUPER_ADMIN.length,
+      updatedAt: "2026-11-08",
+    });
+
+    userByEmailMap.set("nour.gharbia@sanad.org.eg", {
+      email: "nour.gharbia@sanad.org.eg",
+      fullNameAr: "أحمد محمود الشناوي",
+      maskedNationalId: "280031016****8",
+      phoneE164: "+201012345678",
+      role: "ASSOCIATION_ADMIN",
+      tenantId: "33333333-3333-4333-8333-333333333301",
+      tenantNameAr: "جمعية النور للتكافل والتنمية الاجتماعية بطنطا",
+      permissionsCount: ROLE_PERMISSIONS_MAP.ASSOCIATION_ADMIN.length,
+      updatedAt: "2026-11-08",
+    });
+
+    userByEmailMap.set("sara.dakahlia@sanad.org.eg", {
+      email: "sara.dakahlia@sanad.org.eg",
+      fullNameAr: "سارة عبد الرحمن المنصوري",
+      maskedNationalId: "288072212****9",
+      phoneE164: "+201122334455",
+      role: "INDIVIDUAL_INITIATIVE",
+      tenantId: "33333333-3333-4333-8333-333333333302",
+      tenantNameAr: "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري",
+      permissionsCount: ROLE_PERMISSIONS_MAP.INDIVIDUAL_INITIATIVE.length,
+      updatedAt: "2026-11-08",
+    });
+
+    for (const log of allRoleLogs) {
+      const meta = (log.metadataJson || {}) as Record<string, unknown>;
+      if (log.actionCode === "AUTH_REGISTER_VERIFIED") {
+        const emailLower = String(meta.email || "").toLowerCase();
+        if (!emailLower) continue;
+        const existing = userByEmailMap.get(emailLower);
+        const role = (existing?.role ||
+          (meta.role as AuthRoleCode) ||
+          "BENEFICIARY") as AuthRoleCode;
+        userByEmailMap.set(emailLower, {
+          email: emailLower,
+          fullNameAr: String(meta.actorNameAr || existing?.fullNameAr || emailLower),
+          maskedNationalId: String(
+            meta.maskedNationalId || existing?.maskedNationalId || "290010101****1"
+          ),
+          phoneE164: String(meta.phoneE164 || existing?.phoneE164 || "+201000000000"),
+          role,
+          tenantId: (meta.tenantId as string) || existing?.tenantId || null,
+          tenantNameAr: String(
+            meta.tenantNameAr || existing?.tenantNameAr || "بوابة المستفيد"
+          ),
+          permissionsCount: (ROLE_PERMISSIONS_MAP[role] || []).length,
+          updatedAt: log.createdAt.toISOString().slice(0, 10),
+        });
+      } else if (log.actionCode === "ROLE_ASSIGNED_BY_SUPER_ADMIN") {
+        const targetEmail = String(meta.targetEmail || "").toLowerCase();
+        if (!targetEmail) continue;
+        const assignedRole = (meta.assignedRole as AuthRoleCode) || "BENEFICIARY";
+        const existing = userByEmailMap.get(targetEmail);
+        userByEmailMap.set(targetEmail, {
+          email: targetEmail,
+          fullNameAr: String(
+            meta.fullNameAr || existing?.fullNameAr || "مستخدم مسجل بالبريد"
+          ),
+          maskedNationalId: existing?.maskedNationalId || "يرتبط عند التسجيل",
+          phoneE164: existing?.phoneE164 || "—",
+          role: assignedRole,
+          tenantId: (meta.tenantId as string) || null,
+          tenantNameAr: String(
+            meta.tenantNameAr ||
+              existing?.tenantNameAr ||
+              "وفقاً للدور المعتمد"
+          ),
+          permissionsCount: (ROLE_PERMISSIONS_MAP[assignedRole] || []).length,
+          updatedAt: log.createdAt.toISOString().slice(0, 10),
+        });
+      }
+    }
+
+    const managedUsers = Array.from(userByEmailMap.values());
+
     return NextResponse.json({
       ok: true,
       source: "neon_postgresql",
@@ -449,6 +566,7 @@ export async function GET() {
       sharingRequests,
       consents,
       auditLogs,
+      managedUsers,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -550,6 +668,34 @@ export async function POST(request: Request) {
         where: { id: requestId },
         data: { status: decision },
       });
+    } else if (action === "ASSIGN_EMAIL_ROLE") {
+      const targetEmail = String(p.email || "")
+        .trim()
+        .toLowerCase();
+      const assignedRole = String(p.role || "BENEFICIARY") as AuthRoleCode;
+      const tenantId = p.tenantId ? String(p.tenantId) : null;
+      const tenantNameAr = p.tenantNameAr ? String(p.tenantNameAr) : null;
+      const fullNameAr = p.fullNameAr ? String(p.fullNameAr) : null;
+
+      await prisma.auditLog.create({
+        data: {
+          actorUserId: session.userId,
+          tenantId,
+          actionCode: "ROLE_ASSIGNED_BY_SUPER_ADMIN",
+          resourceType: "UserRoleAssignment",
+          metadataJson: {
+            actorNameAr: session.fullNameAr,
+            role: session.role,
+            targetEmail,
+            assignedRole,
+            fullNameAr,
+            tenantId,
+            tenantNameAr: tenantNameAr || "الإدارة المركزية لمنصة سَنَد",
+            descriptionAr: `تعيين دور (${assignedRole}) والصلاحيات المقابلة للبريد الإلكتروني (${targetEmail}) بواسطة مدير المنصة`,
+          },
+        },
+      });
+      return NextResponse.json({ ok: true, persisted: true });
     } else if (action === "TOGGLE_CONSENT") {
       const consentId = String(p.consentId || "");
       const existing = await prisma.consentRecord.findUnique({

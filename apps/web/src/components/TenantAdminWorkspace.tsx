@@ -66,6 +66,7 @@ export function TenantAdminWorkspace({
   // Modals
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
   const [showNewDonationModal, setShowNewDonationModal] = useState(false);
+  const [caseModalError, setCaseModalError] = useState<string | null>(null);
 
   // New Case Form
   const [beneficiaryName, setBeneficiaryName] = useState("");
@@ -141,7 +142,23 @@ export function TenantAdminWorkspace({
 
   const handleCreateCaseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!beneficiaryName.trim() || !nidCheck.isValid || !phoneCheck.isValid) return;
+    setCaseModalError(null);
+    if (!beneficiaryName.trim()) {
+      setCaseModalError("يرجى إدخال اسم المستفيد رباعياً.");
+      return;
+    }
+    if (!nidCheck.isValid) {
+      setCaseModalError(
+        nidCheck.errorAr || "يرجى إدخال الرقم القومي المصري الصحيح (14 رقماً)."
+      );
+      return;
+    }
+    if (!phoneCheck.isValid) {
+      setCaseModalError(
+        phoneCheck.errorAr || "يرجى إدخال رقم الهاتف المحمول المصري الصحيح."
+      );
+      return;
+    }
     onCreateCase({
       tenantId: currentTenant.id,
       beneficiaryNameAr: beneficiaryName.trim(),
@@ -153,6 +170,8 @@ export function TenantAdminWorkspace({
       requestedEgp: Number(requestedEgp) || 3000,
     });
     setBeneficiaryName("");
+    setNationalId("");
+    setMobile("");
     setShowNewCaseModal(false);
   };
 
@@ -624,18 +643,23 @@ export function TenantAdminWorkspace({
               </div>
             </div>
 
+            {caseModalError && (
+              <div className="rounded-xl bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-xs font-bold text-rose-900">
+                {caseModalError}
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setShowNewCaseModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
-                disabled={!nidCheck.isValid || !phoneCheck.isValid}
-                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold cursor-pointer"
               >
                 تسجيل الملف وإحالته للبحث الاجتماعي
               </button>
@@ -830,8 +854,7 @@ export function TenantAdminWorkspace({
 
             <button
               type="submit"
-              disabled={!allocationValidation?.allowed}
-              className="w-full py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm transition disabled:opacity-50"
+              className="w-full py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm cursor-pointer transition"
             >
               تنفيذ الحجز المالي الذري وجدولة مهمة التسليم للمتطوع
             </button>
