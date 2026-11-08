@@ -55,6 +55,7 @@ interface TenantAdminWorkspaceProps {
     caseId: string;
     amountEgp: number;
   }) => void;
+  onRequestAccess?: (profile: Beneficiary360Profile) => void;
 }
 
 export function TenantAdminWorkspace({
@@ -71,6 +72,7 @@ export function TenantAdminWorkspace({
   onCreateDonation,
   onConfirmDonation,
   onAllocateAtomic,
+  onRequestAccess,
 }: TenantAdminWorkspaceProps) {
   const [caseSearch, setCaseSearch] = useState("");
   const [caseStatusFilter, setCaseStatusFilter] = useState<string>("ALL");
@@ -179,25 +181,22 @@ export function TenantAdminWorkspace({
   const handleCreateCaseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setCaseModalError(null);
-    if (!beneficiaryName.trim()) {
-      setCaseModalError("يرجى إدخال اسم المستفيد رباعياً.");
-      return;
-    }
     if (!nidCheck.isValid) {
       setCaseModalError(
-        nidCheck.errorAr || "يرجى إدخال الرقم القومي المصري الصحيح (14 رقماً)."
+        nidCheck.errorAr || "الرقم القومي المصري (14 رقماً) إلزامي؛ يرجى إدخاله بشكل صحيح."
       );
       return;
     }
     if (!phoneCheck.isValid) {
       setCaseModalError(
-        phoneCheck.errorAr || "يرجى إدخال رقم الهاتف المحمول المصري الصحيح."
+        phoneCheck.errorAr || "رقم الهاتف المحمول المصري (11 رقماً) إلزامي؛ يرجى إدخاله بشكل صحيح."
       );
       return;
     }
+    const finalName = beneficiaryName.trim() || `مستفيد بالخدمة (${nationalId.trim().slice(-4)})`;
     onCreateCase({
       tenantId: currentTenant.id,
-      beneficiaryNameAr: beneficiaryName.trim(),
+      beneficiaryNameAr: finalName,
       nationalId: nationalId.trim(),
       phoneE164: phoneCheck.e164 || "+201000000000",
       governorate: nidCheck.parsed?.governorateNameAr || currentTenant.governorate,
@@ -345,6 +344,9 @@ export function TenantAdminWorkspace({
       <BeneficiarySearchBar
         beneficiaryProfiles={activeBeneficiaryList}
         onSelectBeneficiary={handleOpenBeneficiaryProfile}
+        currentTenantId={currentTenant.id}
+        currentUserRole={mode === "ASSOCIATION" ? "ASSOCIATION_ADMIN" : "INDIVIDUAL_INITIATIVE"}
+        onRequestAccess={onRequestAccess}
         titleAr={`الاستعلام عن مستفيد بالرقم القومي / الهاتف (${currentTenant.nameAr})`}
         subtitleAr="ابحث بالرقم القومي أو رقم الهاتف للوصول الفوري لملف المستفيد الشامل (360°) وسجل المساعدات السابقة لمنع ازدواجية الصرف"
       />
@@ -642,13 +644,12 @@ export function TenantAdminWorkspace({
 
             <div className="space-y-1.5">
               <label htmlFor="new-case-name" className="block text-xs font-bold text-slate-700">
-                اسم المستفيد رباعياً (كما في بطاقة الرقم القومي)
+                اسم المستفيد رباعياً (اختياري - كما في بطاقة الرقم القومي)
               </label>
               <input
                 id="new-case-name"
                 type="text"
-                required
-                placeholder="مثال: نادية عبد الحليم مصطفى"
+                placeholder="مثال: نادية عبد الحليم مصطفى (اختياري)"
                 value={beneficiaryName}
                 onChange={(e) => setBeneficiaryName(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm"
@@ -1316,6 +1317,9 @@ export function TenantAdminWorkspace({
         profile={selectedBeneficiary360}
         isOpen={Boolean(selectedBeneficiary360)}
         onClose={() => setSelectedBeneficiary360(null)}
+        currentTenantId={currentTenant.id}
+        currentUserRole={mode === "ASSOCIATION" ? "ASSOCIATION_ADMIN" : "INDIVIDUAL_INITIATIVE"}
+        onRequestAccess={onRequestAccess}
         onUpdateProfile={(updated) => {
           setSelectedBeneficiary360(updated);
           onUpdateBeneficiaryProfile?.(updated);

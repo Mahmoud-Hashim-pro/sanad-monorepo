@@ -40,20 +40,6 @@ const DEFAULT_EMAIL_ROLES: Record<
     tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
     defaultPass: "Sanad@2026",
   },
-  "nour.gharbia@sanad.org.eg": {
-    userId: "22222222-2222-4222-8222-222222222201",
-    role: "ASSOCIATION_ADMIN",
-    tenantId: "33333333-3333-4333-8333-333333333301",
-    tenantNameAr: "جمعية النور للتكافل والتنمية الاجتماعية بطنطا",
-    defaultPass: "Sanad@2026",
-  },
-  "sara.dakahlia@sanad.org.eg": {
-    userId: "22222222-2222-4222-8222-222222222202",
-    role: "INDIVIDUAL_INITIATIVE",
-    tenantId: "33333333-3333-4333-8333-333333333302",
-    tenantNameAr: "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري",
-    defaultPass: "Sanad@2026",
-  },
 };
 
 async function resolveRoleAssignedBySuperAdmin(emailLower: string): Promise<{

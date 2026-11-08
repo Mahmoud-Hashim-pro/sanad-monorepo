@@ -37,6 +37,7 @@ const ACTION_REQUIRED_PERMISSIONS: Record<string, string> = {
   REVIEW_DECISION: "tenant:research:review",
   SUBMIT_FIELD_REPORT: "tenant:research:submit_report",
   CONFIRM_DELIVERY: "tenant:deliveries:confirm_assigned",
+  SUBMIT_DATA_SHARING_REQUEST: "tenant:cases:manage",
   SUBMIT_BENEFICIARY_REQUEST: "portal:requests:create_own",
   TOGGLE_CONSENT: "portal:profile:manage_own",
 };
@@ -467,7 +468,7 @@ export async function GET() {
       }
     >();
 
-    // Seed initial core accounts
+    // Seed initial core accounts (Only Super Admin - system boots pristine)
     userByEmailMap.set("eng.mhashim@gmail.com", {
       email: "eng.mhashim@gmail.com",
       fullNameAr: "م. محمود هاشم (مدير المنصة المركزي)",
@@ -477,30 +478,6 @@ export async function GET() {
       tenantId: null,
       tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
       permissionsCount: ROLE_PERMISSIONS_MAP.SUPER_ADMIN.length,
-      updatedAt: "2026-11-08",
-    });
-
-    userByEmailMap.set("nour.gharbia@sanad.org.eg", {
-      email: "nour.gharbia@sanad.org.eg",
-      fullNameAr: "أحمد محمود الشناوي",
-      maskedNationalId: "280031016****8",
-      phoneE164: "+201012345678",
-      role: "ASSOCIATION_ADMIN",
-      tenantId: "33333333-3333-4333-8333-333333333301",
-      tenantNameAr: "جمعية النور للتكافل والتنمية الاجتماعية بطنطا",
-      permissionsCount: ROLE_PERMISSIONS_MAP.ASSOCIATION_ADMIN.length,
-      updatedAt: "2026-11-08",
-    });
-
-    userByEmailMap.set("sara.dakahlia@sanad.org.eg", {
-      email: "sara.dakahlia@sanad.org.eg",
-      fullNameAr: "سارة عبد الرحمن المنصوري",
-      maskedNationalId: "288072212****9",
-      phoneE164: "+201122334455",
-      role: "INDIVIDUAL_INITIATIVE",
-      tenantId: "33333333-3333-4333-8333-333333333302",
-      tenantNameAr: "مبادرة سند الخير بالدقهلية - أ. سارة المنصوري",
-      permissionsCount: ROLE_PERMISSIONS_MAP.INDIVIDUAL_INITIATIVE.length,
       updatedAt: "2026-11-08",
     });
 
@@ -668,6 +645,39 @@ export async function POST(request: Request) {
         where: { id: requestId },
         data: { status: decision },
       });
+    } else if (action === "SUBMIT_DATA_SHARING_REQUEST") {
+      const targetTenantId = String(p.targetTenantId || "");
+      const beneficiaryNameAr = String(p.beneficiaryNameAr || "مستفيد");
+      const reasonAr = String(p.reasonAr || "طلب تنسيق لمنع ازدواجية صرف المساعدات");
+
+      const requestingTenant = session.tenantId
+        ? await prisma.tenant.findUnique({ where: { id: session.tenantId } })
+        : null;
+      const owningTenant = targetTenantId
+        ? await prisma.tenant.findUnique({ where: { id: targetTenantId } })
+        : await prisma.tenant.findFirst();
+
+      const ben = await prisma.beneficiary.findFirst({
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (ben && owningTenant) {
+        await prisma.dataSharingRequest.create({
+          data: {
+            requestingTenantId: session.tenantId || owningTenant.id,
+            owningTenantId: owningTenant.id,
+            beneficiaryId: ben.id,
+            requestedScopeJson: {
+              beneficiaryNameAr,
+              reasonAr,
+              requestingTenantNameAr: session.tenantNameAr || requestingTenant?.nameAr || "جهة شريكة معتمدة",
+              requesterEmail: session.email,
+              requestedAt: new Date().toISOString(),
+            },
+            status: "PENDING",
+          },
+        });
+      }
     } else if (action === "ASSIGN_EMAIL_ROLE") {
       const targetEmail = String(p.email || "")
         .trim()

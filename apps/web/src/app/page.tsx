@@ -740,6 +740,32 @@ export default function SanadDynamicPlatformPage() {
     }
   };
 
+  const handleRequestDataAccess = async (targetProfile: Beneficiary360Profile) => {
+    if (!sessionUser) return;
+    const ok = await executeLiveAction(
+      "SUBMIT_DATA_SHARING_REQUEST",
+      {
+        beneficiaryId: targetProfile.id,
+        beneficiaryNameAr: targetProfile.fullNameAr,
+        targetTenantId: targetProfile.tenantId,
+        reasonAr: "طلب تنسيق لمنع ازدواجية صرف المساعدات وتوحيد خطة التدخل",
+      },
+      {
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
+        actionCode: "DATA_SHARING_REQUEST_SUBMITTED",
+        descriptionAr: `تقديم طلب وصول ومشاركة بيانات المستفيد (${targetProfile.fullNameAr}) لمدير الجهة المشرفة`,
+        tenantNameAr: sessionUser.tenantNameAr || "الجهة الطالبة",
+      }
+    );
+    if (ok) {
+      notify(
+        `تم إرسال طلب الوصول إلى ملف المستفيد (${targetProfile.fullNameAr}) لمدير الجهة (${targetProfile.tenantNameAr || "الجهة المشرفة"}) بنجاح.`,
+        "success"
+      );
+    }
+  };
+
   // Current active tenant calculation for Association / Individual views
   const associationTenants = tenants.filter((t) => t.type === "ASSOCIATION");
   const individualTenants = tenants.filter((t) => t.type === "INDIVIDUAL");
@@ -988,6 +1014,7 @@ export default function SanadDynamicPlatformPage() {
                 onCreateDonation={handleCreateDonation}
                 onConfirmDonation={handleConfirmDonation}
                 onAllocateAtomic={handleAllocateAtomic}
+                onRequestAccess={handleRequestDataAccess}
               />
             )}
 
@@ -1010,12 +1037,13 @@ export default function SanadDynamicPlatformPage() {
                 onCreateDonation={handleCreateDonation}
                 onConfirmDonation={handleConfirmDonation}
                 onAllocateAtomic={handleAllocateAtomic}
+                onRequestAccess={handleRequestDataAccess}
               />
             )}
 
             {effectiveRoleView === "RESEARCH_SUPERVISOR" && (
               <ResearchSupervisorWorkspace
-                cases={cases}
+                cases={sessionUser?.tenantId ? cases.filter((c) => c.tenantId === sessionUser.tenantId) : cases}
                 beneficiaryProfiles={beneficiaryProfiles}
                 onSelectBeneficiary={(p) => setActiveBeneficiaryModalProfile(p)}
                 onUpdateBeneficiaryProfile={handleUpdateBeneficiaryProfile}
@@ -1026,8 +1054,8 @@ export default function SanadDynamicPlatformPage() {
 
             {effectiveRoleView === "VOLUNTEER" && (
               <VolunteerWorkspace
-                cases={cases}
-                deliveries={deliveries}
+                cases={cases.filter((c) => !sessionUser || c.assignedVolunteerId === sessionUser.userId || c.assignedVolunteerAr.includes(sessionUser.fullNameAr))}
+                deliveries={deliveries.filter((d) => !sessionUser || d.assignedVolunteerAr.includes(sessionUser.fullNameAr))}
                 beneficiaryProfiles={beneficiaryProfiles}
                 onSelectBeneficiary={(p) => setActiveBeneficiaryModalProfile(p)}
                 onUpdateBeneficiaryProfile={handleUpdateBeneficiaryProfile}
@@ -1040,7 +1068,7 @@ export default function SanadDynamicPlatformPage() {
             {effectiveRoleView === "BENEFICIARY" && (
               <BeneficiaryPortalWorkspace
                 tenants={tenants}
-                cases={cases}
+                cases={cases.filter((c) => !sessionUser || c.beneficiaryNameAr.includes(sessionUser.fullNameAr) || c.phoneE164 === sessionUser.phoneE164)}
                 deliveries={deliveries}
                 consents={consents}
                 onSubmitBeneficiaryRequest={handleSubmitBeneficiaryRequest}
@@ -1056,6 +1084,9 @@ export default function SanadDynamicPlatformPage() {
         profile={activeBeneficiaryModalProfile}
         isOpen={Boolean(activeBeneficiaryModalProfile)}
         onClose={() => setActiveBeneficiaryModalProfile(null)}
+        currentTenantId={sessionUser?.tenantId}
+        currentUserRole={sessionUser?.role}
+        onRequestAccess={handleRequestDataAccess}
         onUpdateProfile={handleUpdateBeneficiaryProfile}
       />
     </div>

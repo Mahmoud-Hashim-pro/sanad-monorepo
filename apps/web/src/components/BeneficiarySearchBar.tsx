@@ -11,13 +11,19 @@ interface BeneficiarySearchBarProps {
   onSelectBeneficiary: (profile: Beneficiary360Profile) => void;
   titleAr?: string;
   subtitleAr?: string;
+  currentTenantId?: string | null;
+  currentUserRole?: string;
+  onRequestAccess?: (profile: Beneficiary360Profile) => void;
 }
 
 export function BeneficiarySearchBar({
   beneficiaryProfiles,
   onSelectBeneficiary,
   titleAr = "محرك الاستعلام والبحث المركزي عن المستفيدين بالخدمة",
-  subtitleAr = "ابحث بالرقم القومي (14 رقماً)، برقم الهاتف المحمول، أو بالاسم للوصول الفوري لملف المستفيد الشامل (360°) وسجل المساعدات",
+  subtitleAr = "ابحث بالرقم القومي (14 رقماً)، برقم الهاتف المحمول، أو بالاسم للوصول الفوري لملف المستفيد الشامل (360°) وفحص تكرار الصرف",
+  currentTenantId,
+  currentUserRole,
+  onRequestAccess,
 }: BeneficiarySearchBarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
@@ -130,50 +136,93 @@ export function BeneficiarySearchBar({
         {showResults && cleanQuery && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 text-slate-900 z-40 max-h-80 overflow-y-auto p-2 space-y-1.5 text-right animate-in fade-in slide-in-from-top-2 duration-150">
             {matchingProfiles.length > 0 ? (
-              matchingProfiles.map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => {
-                    onSelectBeneficiary(p);
-                    setShowResults(false);
-                  }}
-                  className="p-3 rounded-xl hover:bg-purple-50 border border-transparent hover:border-purple-200 transition cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-slate-900">
-                        {p.fullNameAr}
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 font-bold">
-                        {p.age} سنة • {p.maritalStatusAr}
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold">
-                        {p.researchContact.decisionAr}
-                      </span>
-                    </div>
+              matchingProfiles.map((p) => {
+                const isOtherTenant = Boolean(
+                  currentUserRole &&
+                  currentUserRole !== "SUPER_ADMIN" &&
+                  p.tenantId &&
+                  currentTenantId &&
+                  p.tenantId !== currentTenantId &&
+                  !p.isDataSharingApproved
+                );
 
-                    <div className="flex flex-wrap items-center gap-x-3 text-[11px] text-slate-500 font-mono">
-                      <span>الرقم القومي: <strong className="text-slate-700">{p.nationalId}</strong></span>
-                      <span>الهاتف: <strong className="text-purple-700">{p.primaryPhone}</strong></span>
-                      <span className="font-sans text-slate-600">
-                        📍 {p.housing.governorate} - {p.housing.cityOrCenterAr} ({p.housing.districtOrVillageAr})
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => {
                       onSelectBeneficiary(p);
                       setShowResults(false);
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shrink-0 self-start sm:self-auto cursor-pointer shadow-sm transition"
+                    className="p-3 rounded-xl hover:bg-purple-50 border border-transparent hover:border-purple-200 transition cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2"
                   >
-                    عرض الملف الشامل (360°)
-                  </button>
-                </div>
-              ))
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900">
+                          {isOtherTenant ? `${p.fullNameAr.slice(0, 10)}...` : p.fullNameAr}
+                        </span>
+                        {isOtherTenant ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold">
+                            🔒 جهة أخرى ({p.tenantNameAr || "جهة معتمدة"})
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 font-bold">
+                              {p.age} سنة • {p.maritalStatusAr}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold">
+                              {p.researchContact.decisionAr}
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-3 text-[11px] text-slate-500 font-mono">
+                        <span>
+                          الرقم القومي:{" "}
+                          <strong className="text-slate-700">
+                            {isOtherTenant ? p.maskedNationalId : p.nationalId}
+                          </strong>
+                        </span>
+                        <span>
+                          الهاتف:{" "}
+                          <span dir="ltr" className="inline-block font-mono text-purple-700 font-bold">
+                            {isOtherTenant ? `${p.primaryPhone.slice(0, 6)}****` : p.primaryPhone}
+                          </span>
+                        </span>
+                        <span className="font-sans text-slate-600">
+                          📍 {p.housing.governorate} - {p.housing.cityOrCenterAr}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isOtherTenant && onRequestAccess && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRequestAccess(p);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-sm transition"
+                        >
+                          طلب إذن وصول
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectBeneficiary(p);
+                          setShowResults(false);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs cursor-pointer shadow-sm transition"
+                      >
+                        {isOtherTenant ? "عرض الملف المعزول" : "عرض الملف الشامل (360°)"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
             ) : (
               <div className="p-4 text-center space-y-2">
                 <p className="text-xs text-slate-600">
