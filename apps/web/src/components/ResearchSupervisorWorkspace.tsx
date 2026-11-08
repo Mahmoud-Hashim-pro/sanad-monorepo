@@ -145,7 +145,7 @@ export function ResearchSupervisorWorkspace({
                     <span className="text-slate-600">الباحث الميداني الحالي:</span>
                     <strong className="text-slate-900">{c.assignedVolunteerAr}</strong>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <label htmlFor={`vol-select-${c.id}`} className="sr-only">
                       اختيار باحث ميداني للحالة {c.caseNumber}
                     </label>
@@ -158,7 +158,7 @@ export function ResearchSupervisorWorkspace({
                           [c.id]: e.target.value,
                         }))
                       }
-                      className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                      className="w-full sm:flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
                     >
                       {FIELD_VOLUNTEERS.map((v) => (
                         <option key={v.id} value={v.id}>
@@ -174,7 +174,7 @@ export function ResearchSupervisorWorkspace({
                           FIELD_VOLUNTEERS[0];
                         onAssignVolunteer(c.id, vol.id, vol.nameAr);
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold transition"
+                      className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold transition text-center"
                     >
                       إسناد زيارة ميدانية
                     </button>
@@ -216,7 +216,7 @@ export function ResearchSupervisorWorkspace({
                 <div className="text-xs font-bold text-slate-700">
                   إصدار قرار لجنة البحث الاجتماعي والأهلية:
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => onReviewDecision(c.id, "ELIGIBLE")}

@@ -219,7 +219,7 @@ export function BeneficiaryPortalWorkspace({
                 </div>
 
                 {/* 5-step visual pills */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-center text-xs">
                   <div className="bg-white p-2 rounded-lg border border-slate-200">
                     <span className="text-slate-500 block">1. الملف</span>
                     <strong className="text-purple-800">{c.caseStatus}</strong>
@@ -236,7 +236,7 @@ export function BeneficiaryPortalWorkspace({
                     <span className="text-slate-500 block">4. التخصيص</span>
                     <strong className="text-amber-800">{c.allocationStatus}</strong>
                   </div>
-                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                  <div className="bg-white p-2 rounded-lg border border-slate-200 col-span-2 sm:col-span-1">
                     <span className="text-slate-500 block">5. التسليم</span>
                     <strong className="text-slate-900">{c.deliveryStatus}</strong>
                   </div>

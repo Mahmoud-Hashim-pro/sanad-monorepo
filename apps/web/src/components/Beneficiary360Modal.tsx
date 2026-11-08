@@ -210,41 +210,41 @@ export function Beneficiary360Modal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="beneficiary-profile-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/70 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-slate-900/70 backdrop-blur-sm overflow-y-auto"
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col text-right overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-200 w-full max-w-5xl h-full sm:h-auto sm:max-h-[92vh] flex flex-col text-right overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header with Beneficiary Essential Demographics */}
-        <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-5 sm:p-6 relative">
+        <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-4 sm:p-6 relative shrink-0">
           <button
             type="button"
             onClick={onClose}
             aria-label="إغلاق ملف المستفيد"
-            className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer text-lg font-bold"
+            className="absolute top-3 left-3 sm:top-4 sm:left-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer text-lg font-bold z-10"
           >
             ✕
           </button>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-purple-500/30 border border-purple-400/40 flex items-center justify-center text-3xl shadow-inner">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-purple-500/30 border border-purple-400/40 flex items-center justify-center text-2xl sm:text-3xl shadow-inner shrink-0">
                 {profile.genderAr === "أنثى" ? "🧕" : "👨"}
               </div>
               <div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <h2
                     id="beneficiary-profile-title"
-                    className="text-xl sm:text-2xl font-black tracking-tight"
+                    className="text-lg sm:text-2xl font-black tracking-tight"
                   >
                     {isCrossTenantBlocked ? `${profile.fullNameAr.slice(0, 10)}... (سجل معزول)` : profile.fullNameAr}
                   </h2>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-purple-200 border border-purple-400/30 font-semibold">
+                  <span className="text-[11px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full bg-white/15 text-purple-200 border border-purple-400/30 font-semibold">
                     {profile.age} سنة • {profile.maritalStatusAr}
                   </span>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
+                  <span className="text-[11px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
                     {profile.researchContact.decisionAr}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-purple-200/90 mt-1.5 font-mono">
+                <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-[11px] sm:text-xs text-purple-200/90 mt-1.5 font-mono">
                   <span>
                     الرقم القومي:{" "}
                     <strong className="text-white font-bold tracking-wider">
@@ -281,7 +281,7 @@ export function Beneficiary360Modal({
             </div>
 
             {profile.tenantNameAr && (
-              <div className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/15 text-xs text-purple-100 hidden sm:block">
+              <div className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/15 text-xs text-purple-100 hidden sm:block shrink-0">
                 <span className="text-purple-300 block text-[10px]">الجهة المشرفة:</span>
                 <strong className="text-white">{profile.tenantNameAr}</strong>
               </div>
@@ -290,7 +290,7 @@ export function Beneficiary360Modal({
 
           {/* Cross-Tenant Blind Alert & Access Request Banner */}
           {isCrossTenantBlocked && (
-            <div className="mt-4 bg-amber-500/20 border border-amber-400/40 rounded-2xl p-3.5 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="mt-3 sm:mt-4 bg-amber-500/20 border border-amber-400/40 rounded-2xl p-3 sm:p-3.5 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="text-2xl">🔒</span>
                 <div>
@@ -306,19 +306,19 @@ export function Beneficiary360Modal({
                 type="button"
                 onClick={handleDispatchAccessRequest}
                 disabled={accessRequested}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-amber-800 disabled:text-amber-300 text-slate-950 font-black text-xs shrink-0 cursor-pointer shadow-md transition flex items-center gap-1.5"
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-amber-800 disabled:text-amber-300 text-slate-950 font-black text-xs shrink-0 cursor-pointer shadow-md transition flex items-center justify-center gap-1.5"
               >
                 <span>{accessRequested ? "✓ تم إرسال الطلب" : "📨 طلب إذن وصول ومشاركة البيانات"}</span>
               </button>
             </div>
           )}
 
-          {/* Navigation Tabs - Wrap cleanly with NO horizontal scrollbar */}
-          <div className="flex flex-wrap items-center gap-2 mt-5 border-t border-white/10 pt-3 text-xs font-bold">
+          {/* Navigation Tabs - Wrap cleanly with NO horizontal scrollbar thumb */}
+          <div className="flex items-center gap-1.5 sm:gap-2 mt-3.5 sm:mt-5 border-t border-white/10 pt-3 text-xs font-bold overflow-x-auto sm:flex-wrap [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <button
               type="button"
               onClick={() => setActiveTab("HOUSING")}
-              className={`px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 sm:shrink ${
                 activeTab === "HOUSING"
                   ? "bg-white text-purple-950 shadow-md"
                   : "bg-white/10 text-purple-100 hover:bg-white/15"
@@ -331,7 +331,7 @@ export function Beneficiary360Modal({
             <button
               type="button"
               onClick={() => setActiveTab("DEPENDENTS")}
-              className={`px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 sm:shrink ${
                 activeTab === "DEPENDENTS"
                   ? "bg-white text-purple-950 shadow-md"
                   : "bg-white/10 text-purple-100 hover:bg-white/15"
@@ -344,7 +344,7 @@ export function Beneficiary360Modal({
             <button
               type="button"
               onClick={() => setActiveTab("FINANCIAL")}
-              className={`px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 sm:shrink ${
                 activeTab === "FINANCIAL"
                   ? "bg-white text-purple-950 shadow-md"
                   : "bg-white/10 text-purple-100 hover:bg-white/15"
@@ -357,7 +357,7 @@ export function Beneficiary360Modal({
             <button
               type="button"
               onClick={() => setActiveTab("RESEARCH")}
-              className={`px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 sm:shrink ${
                 activeTab === "RESEARCH"
                   ? "bg-white text-purple-950 shadow-md"
                   : "bg-white/10 text-purple-100 hover:bg-white/15"
@@ -370,7 +370,7 @@ export function Beneficiary360Modal({
             <button
               type="button"
               onClick={() => setActiveTab("AIDS")}
-              className={`px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 sm:shrink ${
                 activeTab === "AIDS"
                   ? "bg-white text-purple-950 shadow-md"
                   : "bg-white/10 text-purple-100 hover:bg-white/15"
@@ -1520,14 +1520,14 @@ export function Beneficiary360Modal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs">
-          <div className="text-slate-500 font-mono">
+        <div className="p-3 sm:p-4 bg-slate-100 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs shrink-0">
+          <div className="text-slate-500 font-mono text-[11px] sm:text-xs">
             معرّف المستفيد الموحد: <strong className="text-slate-700">{profile.id}</strong>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold cursor-pointer transition shadow-sm"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold cursor-pointer transition shadow-sm text-center"
           >
             إغلاق الملف
           </button>

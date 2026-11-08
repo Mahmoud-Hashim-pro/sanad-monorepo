@@ -330,17 +330,17 @@ export function SuperAdminWorkspace({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 text-center">
           <button
             type="button"
             onClick={() => {
               setTenantFilter("ALL");
               scrollToSection("section-tenants-table");
             }}
-            className="bg-slate-50 hover:bg-slate-100 p-3.5 rounded-xl border border-slate-200 cursor-pointer transition text-center"
+            className="bg-slate-50 hover:bg-slate-100 p-2.5 sm:p-3.5 rounded-xl border border-slate-200 cursor-pointer transition text-center"
           >
-            <div className="text-xs text-slate-600">إجمالي الجهات والمبادرات</div>
-            <div className="text-lg font-bold text-slate-900 mt-1">
+            <div className="text-[11px] sm:text-xs text-slate-600 truncate">إجمالي الجهات والمبادرات</div>
+            <div className="text-base sm:text-lg font-bold text-slate-900 mt-1">
               {tenants.length}
             </div>
           </button>
@@ -350,40 +350,40 @@ export function SuperAdminWorkspace({
               setTenantFilter("PENDING_APPROVAL");
               scrollToSection("section-tenants-table");
             }}
-            className="bg-amber-50 hover:bg-amber-100 p-3.5 rounded-xl border border-amber-200 cursor-pointer transition text-center"
+            className="bg-amber-50 hover:bg-amber-100 p-2.5 sm:p-3.5 rounded-xl border border-amber-200 cursor-pointer transition text-center"
           >
-            <div className="text-xs text-amber-900">جهات بانتظار الاعتماد</div>
-            <div className="text-lg font-bold text-amber-900 mt-1">
+            <div className="text-[11px] sm:text-xs text-amber-900 truncate">جهات بانتظار الاعتماد</div>
+            <div className="text-base sm:text-lg font-bold text-amber-900 mt-1">
               {pendingTenantsCount}
             </div>
           </button>
           <button
             type="button"
             onClick={() => scrollToSection("section-tenants-table")}
-            className="bg-purple-50 hover:bg-purple-100 p-3.5 rounded-xl border border-purple-200 cursor-pointer transition text-center"
+            className="bg-purple-50 hover:bg-purple-100 p-2.5 sm:p-3.5 rounded-xl border border-purple-200 cursor-pointer transition text-center"
           >
-            <div className="text-xs text-purple-900">إجمالي الحالات المسجلة</div>
-            <div className="text-lg font-bold text-purple-900 mt-1">
+            <div className="text-[11px] sm:text-xs text-purple-900 truncate">إجمالي الحالات المسجلة</div>
+            <div className="text-base sm:text-lg font-bold text-purple-900 mt-1">
               {cases.length}
             </div>
           </button>
           <button
             type="button"
             onClick={() => scrollToSection("section-tenants-table")}
-            className="bg-emerald-50 hover:bg-emerald-100 p-3.5 rounded-xl border border-emerald-200 cursor-pointer transition text-center"
+            className="bg-emerald-50 hover:bg-emerald-100 p-2.5 sm:p-3.5 rounded-xl border border-emerald-200 cursor-pointer transition text-center"
           >
-            <div className="text-xs text-emerald-900">إجمالي التبرعات المؤكدة</div>
-            <div className="text-lg font-bold text-emerald-900 mt-1">
+            <div className="text-[11px] sm:text-xs text-emerald-900 truncate">إجمالي التبرعات المؤكدة</div>
+            <div className="text-base sm:text-lg font-bold text-emerald-900 mt-1 truncate">
               {totalConfirmedDonations.toLocaleString("ar-EG")} ج.م
             </div>
           </button>
           <button
             type="button"
             onClick={() => scrollToSection("section-audit-logs")}
-            className="bg-blue-50 hover:bg-blue-100 p-3.5 rounded-xl border border-blue-200 cursor-pointer transition text-center"
+            className="bg-blue-50 hover:bg-blue-100 p-2.5 sm:p-3.5 rounded-xl border border-blue-200 cursor-pointer transition text-center col-span-2 sm:col-span-1 lg:col-span-1"
           >
-            <div className="text-xs text-blue-900">سجلات التدقيق الأمني</div>
-            <div className="text-lg font-bold text-blue-900 mt-1">
+            <div className="text-[11px] sm:text-xs text-blue-900 truncate">سجلات التدقيق الأمني</div>
+            <div className="text-base sm:text-lg font-bold text-blue-900 mt-1">
               {auditLogs.length}
             </div>
           </button>
@@ -775,7 +775,7 @@ export function SuperAdminWorkspace({
 
         {/* Registered Users & Email Roles Table */}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full text-right text-xs border-collapse">
+          <table className="w-full text-right text-xs border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
                 <th className="p-3">المستخدم والبريد</th>
@@ -1132,8 +1132,8 @@ export function SuperAdminWorkspace({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs border-collapse">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-right text-xs border-collapse min-w-[640px]">
             <thead>
               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
                 <th className="p-2.5">التوقيت</th>
@@ -1178,13 +1178,13 @@ export function SuperAdminWorkspace({
       {/* ===================================================================== */}
       {activeModalTenant && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
           role="dialog"
           aria-modal="true"
           onClick={() => setSelectedTenantDetails(null)}
         >
           <div
-            className="bg-white rounded-2xl border border-slate-200 max-w-3xl w-full p-6 shadow-2xl space-y-5 my-8"
+            className="bg-white rounded-2xl border border-slate-200 max-w-3xl w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-4 sm:my-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
@@ -1411,13 +1411,13 @@ export function SuperAdminWorkspace({
       {/* ===================================================================== */}
       {selectedUserDetails && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
           role="dialog"
           aria-modal="true"
           onClick={() => setSelectedUserDetails(null)}
         >
           <div
-            className="bg-white rounded-2xl border border-slate-200 max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl border border-slate-200 max-w-xl w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
@@ -1438,7 +1438,7 @@ export function SuperAdminWorkspace({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200">
               <div>
                 <span className="text-slate-500 block">الدور الوظيفي المعتمد:</span>
                 <strong className="text-emerald-800">
@@ -1583,7 +1583,7 @@ export function SuperAdminWorkspace({
               <button
                 type="button"
                 onClick={() => setSelectedUserDetails(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer hover:bg-slate-800 transition"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs cursor-pointer shadow-sm text-center transition"
               >
                 إغلاق
               </button>

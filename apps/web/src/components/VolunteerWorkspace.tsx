@@ -164,7 +164,7 @@ export function VolunteerWorkspace({
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label
                   htmlFor="vol-income-input"
@@ -180,7 +180,7 @@ export function VolunteerWorkspace({
                   required
                   value={incomeInput}
                   onChange={(e) => setIncomeInput(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm font-mono"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-base sm:text-sm font-mono"
                 />
               </div>
 
@@ -199,7 +199,7 @@ export function VolunteerWorkspace({
                   required
                   value={expensesInput}
                   onChange={(e) => setExpensesInput(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm font-mono"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-base sm:text-sm font-mono"
                 />
               </div>
             </div>

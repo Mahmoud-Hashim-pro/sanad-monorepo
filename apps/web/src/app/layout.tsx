@@ -1,8 +1,15 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#581c87",
+};
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://sanad-ten-sigma.vercel.app";
 

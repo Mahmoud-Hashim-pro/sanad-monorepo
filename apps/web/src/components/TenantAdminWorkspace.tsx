@@ -366,7 +366,7 @@ export function TenantAdminWorkspace({
           <button
             type="button"
             onClick={() => setShowNewCaseModal(true)}
-            className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm transition"
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm transition text-center"
           >
             + تسجيل حالة / مستفيد جديد بالرقم القومي
           </button>
@@ -411,8 +411,8 @@ export function TenantAdminWorkspace({
         </div>
 
         {/* 5-Track Cases Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs border-collapse">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-right text-xs border-collapse min-w-[760px]">
             <thead>
               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
                 <th className="p-3">رقم الحالة</th>
