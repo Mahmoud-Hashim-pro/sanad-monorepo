@@ -11,6 +11,7 @@
     "test": "echo 'Web Validation Tests OK'"
   },
   "dependencies": {
+    "@prisma/client": "^5.14.0",
     "@sanad/database": "workspace:*",
     "@sanad/shared": "workspace:*",
     "lucide-react": "^0.395.0",

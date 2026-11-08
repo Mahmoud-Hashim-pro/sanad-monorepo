@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://sanad.org.eg";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://sanad-ten-sigma.vercel.app";
   const lastModified = new Date();
   return [
     {

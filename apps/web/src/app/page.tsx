@@ -50,7 +50,7 @@ type ActiveRoleView =
 const STORAGE_KEY = "sanad_interactive_state_v2";
 
 export default function SanadWorkspacePreviewPage() {
-  const [activeView, setActiveView] = useState<ActiveRoleView>("ASSOCIATION_ADMIN");
+  const [activeView, setActiveView] = useState<ActiveRoleView>("AUTH_LOGIN_REGISTER");
   const [tenants, setTenants] = useState<MockTenant[]>(FICTIONAL_TENANTS);
   const [cases, setCases] = useState<MockCase[]>(FICTIONAL_CASES);
   const [donations, setDonations] = useState<MockDonation[]>(FICTIONAL_DONATIONS);
