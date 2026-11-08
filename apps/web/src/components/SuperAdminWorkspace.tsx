@@ -17,6 +17,13 @@ import {
   INITIAL_BENEFICIARIES_PROFILES,
   findOrCreateBeneficiaryProfile,
 } from "../lib/mock-data/beneficiaries-data";
+import {
+  ROLE_LABELS_AR,
+  ROLE_PERMISSIONS_MAP,
+  PERMISSION_DESCRIPTIONS_AR,
+  ROLE_GUIDE_ITEMS_AR,
+  type RoleGuideItem,
+} from "../lib/domain/sanad-rules";
 
 export interface ManagedUserItem {
   email: string;
@@ -27,17 +34,11 @@ export interface ManagedUserItem {
   tenantId: string | null;
   tenantNameAr: string;
   permissionsCount: number;
+  permissions?: string[];
+  status?: string;
+  hasPassword?: boolean;
   updatedAt: string;
 }
-
-const ROLE_LABELS_AR: Record<TargetAuthRole, string> = {
-  SUPER_ADMIN: "مدير المنصة المركزي (SUPER_ADMIN)",
-  ASSOCIATION_ADMIN: "مدير جمعية خيرية (ASSOCIATION_ADMIN)",
-  INDIVIDUAL_INITIATIVE: "مبادر فردي مستقل (INDIVIDUAL_INITIATIVE)",
-  RESEARCH_SUPERVISOR: "مشرف البحث الاجتماعي (RESEARCH_SUPERVISOR)",
-  VOLUNTEER: "باحث / متطوع ميداني (VOLUNTEER)",
-  BENEFICIARY: "مستفيد (BENEFICIARY)",
-};
 
 interface SuperAdminWorkspaceProps {
   tenants: MockTenant[];
@@ -63,6 +64,9 @@ interface SuperAdminWorkspaceProps {
     role: TargetAuthRole;
     tenantId?: string | null;
     tenantNameAr?: string | null;
+    password?: string;
+    nationalId?: string;
+    phone?: string;
   }) => void;
   onInspectTenantWorkspace?: (tenant: MockTenant) => void;
   beneficiaryProfiles?: Beneficiary360Profile[];
@@ -128,15 +132,43 @@ export function SuperAdminWorkspace({
   const [newTenantGov, setNewTenantGov] = useState("");
   const [newTenantRegNo, setNewTenantRegNo] = useState("");
 
-  // Assign Role by Email states
+  // Assign Role & User Provisioning states
   const [assignEmailInput, setAssignEmailInput] = useState("");
   const [assignNameInput, setAssignNameInput] = useState("");
+  const [assignPasswordInput, setAssignPasswordInput] = useState("");
+  const [showAssignPassword, setShowAssignPassword] = useState(false);
+  const [assignNationalIdInput, setAssignNationalIdInput] = useState("");
+  const [assignPhoneInput, setAssignPhoneInput] = useState("");
   const [assignRoleSelect, setAssignRoleSelect] =
     useState<TargetAuthRole>("ASSOCIATION_ADMIN");
   const [assignTenantIdSelect, setAssignTenantIdSelect] = useState<string>("");
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+
+  // Reset Password Modal State
+  const [resetPasswordModalUser, setResetPasswordModalUser] =
+    useState<ManagedUserItem | null>(null);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
+
+  // Inside Selected User Details Modal State
+  const [modalNewPasswordInput, setModalNewPasswordInput] = useState("");
+  const [showModalNewPassword, setShowModalNewPassword] = useState(false);
+  const [activeRoleGuideTab, setActiveRoleGuideTab] =
+    useState<TargetAuthRole>("SUPER_ADMIN");
+
   const [rowSelectedRole, setRowSelectedRole] = useState<
     Record<string, TargetAuthRole>
   >({});
+
+  const generateRandomStrongPassword = () => {
+    const chars =
+      "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%&*";
+    let pass = "Sanad@";
+    for (let i = 0; i < 6; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  };
 
   const filteredTenants = tenants.filter((t) =>
     tenantFilter === "ALL" ? true : t.status === tenantFilter
@@ -187,9 +219,54 @@ export function SuperAdminWorkspace({
       role: assignRoleSelect,
       tenantId: matchedTenant?.id || null,
       tenantNameAr: matchedTenant?.nameAr || null,
+      password: assignPasswordInput.trim() || undefined,
+      nationalId: assignNationalIdInput.trim() || undefined,
+      phone: assignPhoneInput.trim() || undefined,
     });
     setAssignEmailInput("");
     setAssignNameInput("");
+    setAssignPasswordInput("");
+    setAssignNationalIdInput("");
+    setAssignPhoneInput("");
+    setShowAddUserModal(false);
+  };
+
+  const handleResetPasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !resetPasswordModalUser ||
+      !resetNewPassword.trim() ||
+      resetNewPassword.trim().length < 6
+    )
+      return;
+
+    onAssignEmailRole?.({
+      email: resetPasswordModalUser.email,
+      fullNameAr: resetPasswordModalUser.fullNameAr,
+      role: resetPasswordModalUser.role,
+      tenantId: resetPasswordModalUser.tenantId,
+      tenantNameAr: resetPasswordModalUser.tenantNameAr,
+      password: resetNewPassword.trim(),
+    });
+
+    setResetPasswordModalUser(null);
+    setResetNewPassword("");
+  };
+
+  const handleModalResetPasswordSubmit = (user: ManagedUserItem) => {
+    if (!modalNewPasswordInput.trim() || modalNewPasswordInput.trim().length < 6)
+      return;
+
+    onAssignEmailRole?.({
+      email: user.email,
+      fullNameAr: user.fullNameAr,
+      role: user.role,
+      tenantId: user.tenantId,
+      tenantNameAr: user.tenantNameAr,
+      password: modalNewPasswordInput.trim(),
+    });
+
+    setModalNewPasswordInput("");
   };
 
   const scrollToSection = (elementId: string) => {
@@ -487,128 +564,225 @@ export function SuperAdminWorkspace({
         id="section-user-roles"
         className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-5"
       >
-        <div>
-          <span className="text-xs font-semibold bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-md">
-            صلاحية حصرية لمدير المنصة (Super Admin Role Assignment)
-          </span>
-          <h3 className="font-bold text-base text-slate-900 mt-1">
-            تعيين الأدوار والصلاحيات للمستخدمين حسب البريد الإلكتروني
-          </h3>
-          <p className="text-xs text-slate-600">
-            اضغط على أي مستخدم في الجدول لعرض بطاقة بياناته وصلاحياته الكاملة، أو قم بتعديل دوره مباشرة.
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <span className="text-xs font-semibold bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-md">
+              حوكمة المستخدمين والوصول (User Governance & Security)
+            </span>
+            <h3 className="font-bold text-lg text-slate-900 mt-1">
+              إدارة المستخدمين، الصلاحيات، وكلمات المرور المعتمدة
+            </h3>
+            <p className="text-xs text-slate-600">
+              يمكنك إضافة أي مستخدم جديد مع كلمة مرور مخصصة وتحديد دوره الوظيفي، أو تعديل الأدوار وإعادة تعيين كلمات المرور فوراً.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddUserModal(true)}
+            className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md cursor-pointer transition flex items-center gap-1.5"
+          >
+            <span>+</span>
+            <span>إضافة مستخدم جديد واعتماد كلمة المرور</span>
+          </button>
         </div>
 
-        {/* Form to pre-assign or update role for any email */}
+        {/* Form to add or pre-assign or update role & credentials */}
         <form
           onSubmit={handleAssignEmailSubmit}
-          className="bg-slate-50 rounded-2xl border border-slate-200 p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end"
+          className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4"
         >
-          <div className="md:col-span-3 space-y-1">
-            <label
-              htmlFor="assign-email-input"
-              className="block text-xs font-bold text-slate-700"
-            >
-              البريد الإلكتروني للمستخدم *
-            </label>
-            <input
-              id="assign-email-input"
-              type="email"
-              dir="ltr"
-              required
-              placeholder="user@domain.com"
-              value={assignEmailInput}
-              onChange={(e) => setAssignEmailInput(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono bg-white"
-            />
-          </div>
-
-          <div className="md:col-span-3 space-y-1">
-            <label
-              htmlFor="assign-name-input"
-              className="block text-xs font-bold text-slate-700"
-            >
-              الاسم (اختياري للتوضيح)
-            </label>
-            <input
-              id="assign-name-input"
-              type="text"
-              placeholder="اسم المستخدم"
-              value={assignNameInput}
-              onChange={(e) => setAssignNameInput(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs bg-white"
-            />
-          </div>
-
-          <div className="md:col-span-3 space-y-1">
-            <label
-              htmlFor="assign-role-select"
-              className="block text-xs font-bold text-slate-700"
-            >
-              الدور الوظيفي والصلاحيات *
-            </label>
-            <select
-              id="assign-role-select"
-              value={assignRoleSelect}
-              onChange={(e) =>
-                setAssignRoleSelect(e.target.value as TargetAuthRole)
-              }
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold bg-white cursor-pointer"
-            >
-              <option value="ASSOCIATION_ADMIN">
-                مدير جمعية خيرية (ASSOCIATION_ADMIN)
-              </option>
-              <option value="INDIVIDUAL_INITIATIVE">
-                مبادر فردي مستقل (INDIVIDUAL_INITIATIVE)
-              </option>
-              <option value="RESEARCH_SUPERVISOR">
-                مشرف البحث الاجتماعي (RESEARCH_SUPERVISOR)
-              </option>
-              <option value="VOLUNTEER">باحث / متطوع ميداني (VOLUNTEER)</option>
-              <option value="BENEFICIARY">مستفيد (BENEFICIARY)</option>
-              <option value="SUPER_ADMIN">
-                مدير المنصة المركزي (SUPER_ADMIN)
-              </option>
-            </select>
-          </div>
-
-          <div className="md:col-span-3 flex flex-col gap-2">
-            {(assignRoleSelect === "ASSOCIATION_ADMIN" ||
-              assignRoleSelect === "INDIVIDUAL_INITIATIVE") && (
-              <select
-                aria-label="الجهة التابع لها"
-                value={assignTenantIdSelect}
-                onChange={(e) => setAssignTenantIdSelect(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-2.5 py-1.5 text-xs bg-white cursor-pointer"
-              >
-                <option value="">اختر الجمعية / المبادرة (اختياري)</option>
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.nameAr}
-                  </option>
-                ))}
-              </select>
-            )}
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <span>👤</span>
+              <span>نموذج إضافة مستخدم جديد أو تحديث صلاحيات وكلمة مرور حساب مسجل:</span>
+            </span>
             <button
-              type="submit"
-              className="w-full py-2 px-3 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm cursor-pointer transition"
+              type="button"
+              onClick={() => {
+                const generated = generateRandomStrongPassword();
+                setAssignPasswordInput(generated);
+                setShowAssignPassword(true);
+              }}
+              className="text-[11px] font-bold text-purple-700 hover:text-purple-900 underline cursor-pointer"
             >
-              تعيين الدور وحفظ الصلاحيات
+              توليد كلمة مرور عشوائية
             </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+            <div className="md:col-span-3 space-y-1">
+              <label
+                htmlFor="assign-email-input"
+                className="block text-xs font-bold text-slate-700"
+              >
+                البريد الإلكتروني للمستخدم *
+              </label>
+              <input
+                id="assign-email-input"
+                type="email"
+                dir="ltr"
+                required
+                placeholder="user@domain.com"
+                value={assignEmailInput}
+                onChange={(e) => setAssignEmailInput(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono bg-white focus:border-purple-600 focus:outline-none"
+              />
+            </div>
+
+            <div className="md:col-span-3 space-y-1">
+              <label
+                htmlFor="assign-name-input"
+                className="block text-xs font-bold text-slate-700"
+              >
+                الاسم الكامل رباعياً (كما في البطاقة) *
+              </label>
+              <input
+                id="assign-name-input"
+                type="text"
+                required
+                placeholder="أحمد محمد علي إبراهيم"
+                value={assignNameInput}
+                onChange={(e) => setAssignNameInput(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs bg-white focus:border-purple-600 focus:outline-none"
+              />
+            </div>
+
+            <div className="md:col-span-3 space-y-1">
+              <label
+                htmlFor="assign-password-input"
+                className="block text-xs font-bold text-slate-700"
+              >
+                كلمة المرور للحساب *
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  id="assign-password-input"
+                  type={showAssignPassword ? "text" : "password"}
+                  dir="ltr"
+                  placeholder="Sanad@2026"
+                  value={assignPasswordInput}
+                  onChange={(e) => setAssignPasswordInput(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 pl-3 pr-14 py-2 text-xs font-mono bg-white focus:border-purple-600 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAssignPassword((prev) => !prev)}
+                  className="absolute left-2 text-[10px] text-purple-700 font-bold px-1.5 py-0.5 rounded bg-purple-50 hover:bg-purple-100"
+                >
+                  {showAssignPassword ? "إخفاء" : "إظهار"}
+                </button>
+              </div>
+            </div>
+
+            <div className="md:col-span-3 space-y-1">
+              <label
+                htmlFor="assign-role-select"
+                className="block text-xs font-bold text-slate-700"
+              >
+                الدور الوظيفي والصلاحيات *
+              </label>
+              <select
+                id="assign-role-select"
+                value={assignRoleSelect}
+                onChange={(e) =>
+                  setAssignRoleSelect(e.target.value as TargetAuthRole)
+                }
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold bg-white cursor-pointer"
+              >
+                <option value="ASSOCIATION_ADMIN">
+                  مدير جمعية خيرية مشهرة (ASSOCIATION_ADMIN)
+                </option>
+                <option value="INDIVIDUAL_INITIATIVE">
+                  مبادر فردي مستقل (INDIVIDUAL_INITIATIVE)
+                </option>
+                <option value="RESEARCH_SUPERVISOR">
+                  مشرف البحث الاجتماعي (RESEARCH_SUPERVISOR)
+                </option>
+                <option value="VOLUNTEER">باحث / متطوع ميداني (VOLUNTEER)</option>
+                <option value="BENEFICIARY">مستفيد / طالب مساعدة (BENEFICIARY)</option>
+                <option value="SUPER_ADMIN">
+                  مدير المنصة المركزي (SUPER_ADMIN)
+                </option>
+              </select>
+            </div>
+
+            <div className="md:col-span-4 space-y-1">
+              <label
+                htmlFor="assign-nid-input"
+                className="block text-xs font-bold text-slate-700"
+              >
+                الرقم القومي المصري (14 رقماً - اختياري)
+              </label>
+              <input
+                id="assign-nid-input"
+                type="text"
+                dir="ltr"
+                maxLength={14}
+                placeholder="29001010101234"
+                value={assignNationalIdInput}
+                onChange={(e) => setAssignNationalIdInput(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono bg-white"
+              />
+            </div>
+
+            <div className="md:col-span-4 space-y-1">
+              <label
+                htmlFor="assign-phone-input"
+                className="block text-xs font-bold text-slate-700"
+              >
+                رقم الهاتف المحمول (01xxxxxxxxx - اختياري)
+              </label>
+              <input
+                id="assign-phone-input"
+                type="tel"
+                dir="ltr"
+                placeholder="01012345678"
+                value={assignPhoneInput}
+                onChange={(e) => setAssignPhoneInput(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono bg-white"
+              />
+            </div>
+
+            <div className="md:col-span-4 flex flex-col gap-2">
+              {(assignRoleSelect === "ASSOCIATION_ADMIN" ||
+                assignRoleSelect === "INDIVIDUAL_INITIATIVE" ||
+                assignRoleSelect === "RESEARCH_SUPERVISOR" ||
+                assignRoleSelect === "VOLUNTEER") && (
+                <select
+                  aria-label="الجهة التابع لها"
+                  value={assignTenantIdSelect}
+                  onChange={(e) => setAssignTenantIdSelect(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-2.5 py-1.5 text-xs bg-white cursor-pointer"
+                >
+                  <option value="">اختر الجمعية / المبادرة (اختياري)</option>
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nameAr}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md cursor-pointer transition flex items-center justify-center gap-1.5"
+              >
+                <span>✓</span>
+                <span>اعتماد المستخدم وتفعيل الحساب فوراً</span>
+              </button>
+            </div>
           </div>
         </form>
 
         {/* Registered Users & Email Roles Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full text-right text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                <th className="p-3">المستخدم</th>
-                <th className="p-3">البريد الإلكتروني</th>
-                <th className="p-3">الرقم القومي / الهاتف</th>
-                <th className="p-3">الدور الحالي والصلاحيات</th>
+                <th className="p-3">المستخدم والبريد</th>
+                <th className="p-3">الدور الوظيفي والصلاحيات</th>
                 <th className="p-3">النطاق / الجهة</th>
-                <th className="p-3">تعديل الدور أو عرض التفاصيل</th>
+                <th className="p-3">الرقم القومي / الهاتف</th>
+                <th className="p-3 text-center">إدارة الصلاحيات وكلمة المرور</th>
               </tr>
             </thead>
             <tbody>
@@ -633,37 +807,38 @@ export function SuperAdminWorkspace({
                   >
                     <td className="p-3 font-bold text-slate-900">
                       <div className="flex items-center gap-1.5">
-                        <span>{u.fullNameAr}</span>
+                        <span className="font-bold text-slate-900">{u.fullNameAr}</span>
                         {u.role === "BENEFICIARY" && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 font-bold">
-                            ملف مستفيد 360°
+                            مستفيد 360°
                           </span>
                         )}
                       </div>
-                    </td>
-                    <td className="p-3 font-mono text-purple-900 font-semibold">
-                      {u.email}
-                    </td>
-                    <td className="p-3 font-mono text-slate-600">
-                      <div>{u.maskedNationalId}</div>
-                      <div dir="ltr" className="text-right text-[11px]">
-                        {u.phoneE164}
+                      <div className="font-mono text-[11px] text-purple-800 font-semibold mt-0.5">
+                        {u.email}
                       </div>
                     </td>
                     <td className="p-3">
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold">
-                        {ROLE_LABELS_AR[u.role] || u.role}
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[11px]">
+                        <span>🛡️</span>
+                        <span>{ROLE_LABELS_AR[u.role] || u.role}</span>
                       </span>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {u.permissionsCount} صلاحية مفعّلة
+                      <div className="text-[11px] text-slate-500 mt-0.5 font-semibold">
+                        {u.permissionsCount} صلاحية معتمدة بالنظام
                       </div>
                     </td>
-                    <td className="p-3 text-slate-700">{u.tenantNameAr}</td>
+                    <td className="p-3 text-slate-700 font-medium">{u.tenantNameAr}</td>
+                    <td className="p-3 font-mono text-slate-600">
+                      <div>{u.maskedNationalId}</div>
+                      <div dir="ltr" className="text-right text-[11px] text-slate-500">
+                        {u.phoneE164}
+                      </div>
+                    </td>
                     <td
-                      className="p-3"
+                      className="p-3 text-center"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-center gap-2">
                         {u.role === "BENEFICIARY" && (
                           <button
                             type="button"
@@ -675,12 +850,20 @@ export function SuperAdminWorkspace({
                                 nationalId: u.maskedNationalId,
                               })
                             }
-                            className="px-2.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] cursor-pointer transition flex items-center gap-1 shadow-sm"
+                            className="px-2.5 py-1 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] cursor-pointer transition flex items-center gap-1 shadow-sm"
                           >
                             <span>👤</span>
-                            <span>ملف المستفيد (360°)</span>
+                            <span>ملف 360°</span>
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUserDetails(u)}
+                          className="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[11px] cursor-pointer transition flex items-center gap-1"
+                        >
+                          <span>🔍</span>
+                          <span>عرض الصلاحيات</span>
+                        </button>
                         <select
                           aria-label={`تغيير دور ${u.email}`}
                           value={selectedRoleForRow}
@@ -690,17 +873,13 @@ export function SuperAdminWorkspace({
                               [u.email]: e.target.value as TargetAuthRole,
                             }))
                           }
-                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white font-semibold cursor-pointer"
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-xs bg-white font-semibold cursor-pointer"
                         >
                           <option value="SUPER_ADMIN">مدير المنصة</option>
                           <option value="ASSOCIATION_ADMIN">مدير جمعية</option>
-                          <option value="INDIVIDUAL_INITIATIVE">
-                            مبادر فردي
-                          </option>
-                          <option value="RESEARCH_SUPERVISOR">
-                            مشرف بحث اجتماعي
-                          </option>
-                          <option value="VOLUNTEER">باحث / متطوع</option>
+                          <option value="INDIVIDUAL_INITIATIVE">مبادر فردي</option>
+                          <option value="RESEARCH_SUPERVISOR">مشرف بحث</option>
+                          <option value="VOLUNTEER">باحث ميداني</option>
                           <option value="BENEFICIARY">مستفيد</option>
                         </select>
                         <button
@@ -714,16 +893,20 @@ export function SuperAdminWorkspace({
                               tenantNameAr: u.tenantNameAr,
                             })
                           }
-                          className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold cursor-pointer transition text-xs"
+                          className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold cursor-pointer transition text-[11px]"
                         >
                           تحديث الدور
                         </button>
                         <button
                           type="button"
-                          onClick={() => setSelectedUserDetails(u)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold cursor-pointer transition"
+                          onClick={() => {
+                            setResetPasswordModalUser(u);
+                            setResetNewPassword("");
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] cursor-pointer transition flex items-center gap-1"
                         >
-                          التفاصيل
+                          <span>🔑</span>
+                          <span>تعيين كلمة المرور</span>
                         </button>
                       </div>
                     </td>
@@ -732,6 +915,100 @@ export function SuperAdminWorkspace({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Roles & Permissions Matrix Guide Card */}
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+            <div>
+              <span className="text-[11px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                معايير الحوكمة وفصل المهام الرقابية (Segregation of Duties - SoD)
+              </span>
+              <h4 className="font-bold text-sm text-slate-900 mt-1">
+                دليل مصفوفة الصلاحيات والأدوار المعتمدة في منصة سَنَد
+              </h4>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {ROLE_GUIDE_ITEMS_AR.map((item) => (
+                <button
+                  key={item.code}
+                  type="button"
+                  onClick={() => setActiveRoleGuideTab(item.code)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition ${
+                    activeRoleGuideTab === item.code
+                      ? "bg-purple-700 text-white shadow-sm"
+                      : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {item.titleAr.split("(")[0].trim()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Active Role Guide Tab Details */}
+          {(() => {
+            const activeGuide =
+              ROLE_GUIDE_ITEMS_AR.find((r) => r.code === activeRoleGuideTab) ||
+              ROLE_GUIDE_ITEMS_AR[0];
+            const activePerms = ROLE_PERMISSIONS_MAP[activeGuide.code] || [];
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="md:col-span-5 bg-white border border-slate-200 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-slate-900">
+                      {activeGuide.titleAr}
+                    </span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
+                      {activeGuide.permissionsCount} صلاحية
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {activeGuide.summaryAr}
+                  </p>
+                  <div className="space-y-1 border-t border-slate-100 pt-2">
+                    <span className="text-[11px] font-bold text-slate-800 block">
+                      المسؤوليات الرئيسية:
+                    </span>
+                    <ul className="text-[11px] text-slate-600 space-y-1 list-disc list-inside">
+                      {activeGuide.responsibilitiesAr.map((resp, idx) => (
+                        <li key={idx}>{resp}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="md:col-span-7 bg-white border border-slate-200 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold text-slate-800">
+                      قائمة الصلاحيات الممنوحة لهذا الدور بالتفصيل:
+                    </span>
+                    <span className="text-[11px] font-mono text-purple-700">
+                      {activeGuide.code}
+                    </span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                    {activePerms.map((perm) => (
+                      <div
+                        key={perm}
+                        className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs flex items-start gap-2"
+                      >
+                        <span className="text-emerald-700 font-bold">✓</span>
+                        <div className="flex-1">
+                          <span className="font-mono text-[11px] font-bold text-slate-800 block">
+                            {perm}
+                          </span>
+                          <span className="text-[11px] text-slate-600">
+                            {PERMISSION_DESCRIPTIONS_AR[perm] || "صلاحية نظام معتمدة"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </section>
 
@@ -1140,7 +1417,7 @@ export function SuperAdminWorkspace({
           onClick={() => setSelectedUserDetails(null)}
         >
           <div
-            className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4"
+            className="bg-white rounded-2xl border border-slate-200 max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
@@ -1188,6 +1465,91 @@ export function SuperAdminWorkspace({
               </div>
             </div>
 
+            {/* List of Permissions Granted to this user */}
+            <div className="space-y-2 border-t border-slate-200 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <span>🛡️</span>
+                  <span>
+                    الصلاحيات المعتمدة لهذا الدور (
+                    {(ROLE_PERMISSIONS_MAP[selectedUserDetails.role] || []).length}{" "}
+                    صلاحية مفعّلة):
+                  </span>
+                </span>
+                <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full font-mono">
+                  {selectedUserDetails.role}
+                </span>
+              </div>
+              <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1 border border-slate-100 rounded-xl p-2 bg-slate-50/50">
+                {(ROLE_PERMISSIONS_MAP[selectedUserDetails.role] || []).map(
+                  (perm) => (
+                    <div
+                      key={perm}
+                      className="bg-white border border-slate-200 rounded-lg p-2 text-xs flex items-start gap-2"
+                    >
+                      <span className="text-emerald-700 font-bold mt-0.5">✓</span>
+                      <div>
+                        <div className="font-mono text-[11px] font-bold text-slate-800">
+                          {perm}
+                        </div>
+                        <div className="text-[11px] text-slate-600 mt-0.5">
+                          {PERMISSION_DESCRIPTIONS_AR[perm] ||
+                            "صلاحية نظام معتمدة"}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Quick Password Reset Inside User Card */}
+            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <span>🔑</span>
+                  <span>إعادة تعيين كلمة المرور لهذا المستخدم:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const generated = generateRandomStrongPassword();
+                    setModalNewPasswordInput(generated);
+                    setShowModalNewPassword(true);
+                  }}
+                  className="text-[10px] font-bold text-purple-700 underline cursor-pointer"
+                >
+                  توليد كلمة مرور
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type={showModalNewPassword ? "text" : "password"}
+                  dir="ltr"
+                  placeholder="كلمة مرور جديدة (6 خانات على الأقل)"
+                  value={modalNewPasswordInput}
+                  onChange={(e) => setModalNewPasswordInput(e.target.value)}
+                  className="flex-1 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-mono bg-white focus:border-purple-600 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowModalNewPassword((prev) => !prev)}
+                  className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-bold"
+                >
+                  {showModalNewPassword ? "إخفاء" : "إظهار"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleModalResetPasswordSubmit(selectedUserDetails)
+                  }
+                  className="px-3.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm transition cursor-pointer"
+                >
+                  تحديث كلمة المرور
+                </button>
+              </div>
+            </div>
+
             {selectedUserDetails.role === "BENEFICIARY" && (
               <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 space-y-2 text-right">
                 <div className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
@@ -1217,15 +1579,305 @@ export function SuperAdminWorkspace({
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex justify-end pt-2 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => setSelectedUserDetails(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer hover:bg-slate-800 transition"
               >
                 إغلاق
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Standalone Reset Password Modal */}
+      {resetPasswordModalUser && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setResetPasswordModalUser(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  إعادة تعيين كلمة المرور
+                </h3>
+                <p className="text-xs font-mono text-purple-800">
+                  {resetPasswordModalUser.email} ({resetPasswordModalUser.fullNameAr})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetPasswordModalUser(null)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="reset-new-password"
+                    className="block text-xs font-bold text-slate-700"
+                  >
+                    كلمة المرور الجديدة (6 خانات على الأقل) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const gen = generateRandomStrongPassword();
+                      setResetNewPassword(gen);
+                      setShowResetPassword(true);
+                    }}
+                    className="text-[10px] font-bold text-purple-700 underline cursor-pointer"
+                  >
+                    توليد كلمة مرور
+                  </button>
+                </div>
+                <div className="relative flex items-center">
+                  <input
+                    id="reset-new-password"
+                    type={showResetPassword ? "text" : "password"}
+                    dir="ltr"
+                    required
+                    placeholder="••••••••"
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 pl-3 pr-14 py-2 text-xs font-mono bg-white focus:border-purple-600 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword((prev) => !prev)}
+                    className="absolute left-2 text-[10px] text-purple-700 font-bold px-1.5 py-0.5 rounded bg-purple-50 hover:bg-purple-100"
+                  >
+                    {showResetPassword ? "إخفاء" : "إظهار"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setResetPasswordModalUser(null)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm"
+                >
+                  حفظ وتحديث كلمة المرور
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Standalone Add User Modal */}
+      {showAddUserModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowAddUserModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  إضافة مستخدم جديد واعتماد الصلاحيات وكلمة المرور
+                </h3>
+                <p className="text-xs text-slate-500">
+                  يتم حفظ بيانات المستخدم في قاعدة البيانات فوراً مع إمكانية تسجيل الدخول المباشر.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddUserModal(false)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAssignEmailSubmit} className="space-y-3">
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  الاسم الكامل رباعياً *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="محمد أحمد علي خليل"
+                  value={assignNameInput}
+                  onChange={(e) => setAssignNameInput(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs bg-white focus:border-purple-600 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  البريد الإلكتروني الرسمي *
+                </label>
+                <input
+                  type="email"
+                  dir="ltr"
+                  required
+                  placeholder="user@domain.com"
+                  value={assignEmailInput}
+                  onChange={(e) => setAssignEmailInput(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono bg-white focus:border-purple-600 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700">
+                    كلمة المرور *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const gen = generateRandomStrongPassword();
+                      setAssignPasswordInput(gen);
+                      setShowAssignPassword(true);
+                    }}
+                    className="text-[10px] font-bold text-purple-700 underline cursor-pointer"
+                  >
+                    توليد كلمة مرور
+                  </button>
+                </div>
+                <div className="relative flex items-center">
+                  <input
+                    type={showAssignPassword ? "text" : "password"}
+                    dir="ltr"
+                    required
+                    placeholder="Sanad@2026"
+                    value={assignPasswordInput}
+                    onChange={(e) => setAssignPasswordInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 pl-3 pr-14 py-2 text-xs font-mono bg-white focus:border-purple-600 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAssignPassword((prev) => !prev)}
+                    className="absolute left-2 text-[10px] text-purple-700 font-bold px-1.5 py-0.5 rounded bg-purple-50 hover:bg-purple-100"
+                  >
+                    {showAssignPassword ? "إخفاء" : "إظهار"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  الدور الوظيفي والصلاحيات *
+                </label>
+                <select
+                  value={assignRoleSelect}
+                  onChange={(e) =>
+                    setAssignRoleSelect(e.target.value as TargetAuthRole)
+                  }
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold bg-white cursor-pointer"
+                >
+                  <option value="ASSOCIATION_ADMIN">
+                    مدير جمعية خيرية مشهرة (ASSOCIATION_ADMIN)
+                  </option>
+                  <option value="INDIVIDUAL_INITIATIVE">
+                    مبادر فردي مستقل (INDIVIDUAL_INITIATIVE)
+                  </option>
+                  <option value="RESEARCH_SUPERVISOR">
+                    مشرف البحث الاجتماعي (RESEARCH_SUPERVISOR)
+                  </option>
+                  <option value="VOLUNTEER">باحث / متطوع ميداني (VOLUNTEER)</option>
+                  <option value="BENEFICIARY">مستفيد / طالب مساعدة (BENEFICIARY)</option>
+                  <option value="SUPER_ADMIN">
+                    مدير المنصة المركزي (SUPER_ADMIN)
+                  </option>
+                </select>
+              </div>
+
+              {(assignRoleSelect === "ASSOCIATION_ADMIN" ||
+                assignRoleSelect === "INDIVIDUAL_INITIATIVE" ||
+                assignRoleSelect === "RESEARCH_SUPERVISOR" ||
+                assignRoleSelect === "VOLUNTEER") && (
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    الجهة / المبادرة التابع لها
+                  </label>
+                  <select
+                    value={assignTenantIdSelect}
+                    onChange={(e) => setAssignTenantIdSelect(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs bg-white cursor-pointer"
+                  >
+                    <option value="">اختر الجمعية / المبادرة</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nameAr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    الرقم القومي (14 رقماً)
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    maxLength={14}
+                    placeholder="29001010101234"
+                    value={assignNationalIdInput}
+                    onChange={(e) => setAssignNationalIdInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    رقم الهاتف المحمول
+                  </label>
+                  <input
+                    type="tel"
+                    dir="ltr"
+                    placeholder="01012345678"
+                    value={assignPhoneInput}
+                    onChange={(e) => setAssignPhoneInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(false)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm"
+                >
+                  إضافة المستخدم واعتماد الصلاحيات
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -348,6 +348,9 @@ export default function SanadDynamicPlatformPage() {
     role: TargetAuthRole;
     tenantId?: string | null;
     tenantNameAr?: string | null;
+    password?: string;
+    nationalId?: string;
+    phone?: string;
   }) => {
     const ok = await executeLiveAction(
       "ASSIGN_EMAIL_ROLE",
@@ -356,15 +359,16 @@ export default function SanadDynamicPlatformPage() {
         actorNameAr: actorDisplayName,
         actorRoleAr: actorRoleDisplay,
         actionCode: "ROLE_ASSIGNED_BY_SUPER_ADMIN",
-        descriptionAr: `تعيين الدور (${ROLE_LABELS_AR[payload.role]}) للبريد الإلكتروني (${payload.email})`,
+        descriptionAr: `تعيين الدور (${ROLE_LABELS_AR[payload.role] || payload.role}) للبريد (${payload.email}) مع اعتماد كلمة المرور والصلاحيات`,
         tenantNameAr: payload.tenantNameAr || "الإدارة المركزية لمنصة سَنَد",
       }
     );
     if (ok) {
       notify(
-        `تم تعيين دور (${ROLE_LABELS_AR[payload.role]}) للبريد (${payload.email}) وحفظ صلاحياته في قاعدة البيانات!`,
+        `تم حفظ بيانات المستخدم (${payload.email}) واعتماد الدور وكلمة المرور بنجاح في قاعدة البيانات!`,
         "success"
       );
+      await fetchLiveDatabaseState();
     }
   };
 

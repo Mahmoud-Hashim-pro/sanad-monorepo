@@ -7,6 +7,216 @@ export interface DomainDecisionResult {
   ruleCode: string;
 }
 
+export type AuthRoleCode =
+  | "SUPER_ADMIN"
+  | "ASSOCIATION_ADMIN"
+  | "INDIVIDUAL_INITIATIVE"
+  | "RESEARCH_SUPERVISOR"
+  | "VOLUNTEER"
+  | "BENEFICIARY";
+
+export const ROLE_LABELS_AR: Record<AuthRoleCode, string> = {
+  SUPER_ADMIN: "مدير المنصة المركزي (SUPER_ADMIN)",
+  ASSOCIATION_ADMIN: "مدير جمعية خيرية مشهرة (ASSOCIATION_ADMIN)",
+  INDIVIDUAL_INITIATIVE: "مبادر فردي مستقل (INDIVIDUAL_INITIATIVE)",
+  RESEARCH_SUPERVISOR: "مشرف البحث الاجتماعي (RESEARCH_SUPERVISOR)",
+  VOLUNTEER: "باحث / متطوع ميداني (VOLUNTEER)",
+  BENEFICIARY: "مستفيد / طالب مساعدة (BENEFICIARY)",
+};
+
+export const ROLE_PERMISSIONS_MAP: Record<AuthRoleCode, string[]> = {
+  SUPER_ADMIN: [
+    "platform:tenants:approve",
+    "platform:users:manage",
+    "platform:reference_data:manage",
+    "platform:audit:read",
+    "platform:stats:read",
+    "tenant:members:manage",
+    "tenant:beneficiaries:manage",
+    "tenant:households:manage",
+    "tenant:cases:manage",
+    "tenant:cases:decide_eligibility",
+    "tenant:research:assign",
+    "tenant:research:review",
+    "tenant:donors:manage",
+    "tenant:donations:manage",
+    "tenant:allocations:create",
+    "tenant:deliveries:manage",
+    "tenant:reports:read",
+  ],
+  ASSOCIATION_ADMIN: [
+    "tenant:members:manage",
+    "tenant:beneficiaries:manage",
+    "tenant:households:manage",
+    "tenant:cases:manage",
+    "tenant:cases:decide_eligibility",
+    "tenant:research:assign",
+    "tenant:research:review",
+    "tenant:donors:manage",
+    "tenant:donations:manage",
+    "tenant:allocations:create",
+    "tenant:deliveries:manage",
+    "tenant:reports:read",
+  ],
+  INDIVIDUAL_INITIATIVE: [
+    "tenant:beneficiaries:manage",
+    "tenant:households:manage",
+    "tenant:cases:manage",
+    "tenant:cases:decide_eligibility",
+    "tenant:research:assign",
+    "tenant:research:review",
+    "tenant:donors:manage",
+    "tenant:donations:manage",
+    "tenant:allocations:create",
+    "tenant:deliveries:manage",
+    "tenant:reports:read",
+  ],
+  RESEARCH_SUPERVISOR: [
+    "tenant:cases:read_assigned",
+    "tenant:research:assign",
+    "tenant:research:review",
+    "tenant:cases:recommend_eligibility",
+  ],
+  VOLUNTEER: [
+    "tenant:tasks:read_assigned",
+    "tenant:research:submit_report",
+    "tenant:attachments:upload_authorized",
+    "tenant:deliveries:confirm_assigned",
+  ],
+  BENEFICIARY: [
+    "portal:profile:manage_own",
+    "portal:requests:create_own",
+    "portal:requests:read_own",
+    "portal:documents:upload_own",
+    "portal:aid_history:read_own_verified",
+    "portal:corrections:submit_own",
+  ],
+};
+
+export const PERMISSION_DESCRIPTIONS_AR: Record<string, string> = {
+  // Platform Super Admin
+  "platform:tenants:approve": "مراجعة واعتماد الجمعيات الخيرية والمبادرات الأهلية وإصدار تراخيص العمل",
+  "platform:users:manage": "إدارة حسابات المستخدمين وتعيين الأدوار وتعديل الصلاحيات واعتماد كلمات المرور",
+  "platform:reference_data:manage": "إدارة الجداول المرجعية ومحددات السياسات والحوكمة والرقمنة",
+  "platform:audit:read": "الاطلاع على سجلات التدقيق الجنائي غير القابلة للتعديل وتتبع العمليات",
+  "platform:stats:read": "متابعة المؤشرات الإحصائية العامة ونسب الصرف ومؤشرات الأداء الوطنية",
+  // Tenant & Case Management
+  "tenant:members:manage": "إدارة أعضاء فريق العمل والمتطوعين داخل نطاق الكيان",
+  "tenant:beneficiaries:manage": "تسجيل وتعديل بيانات المستفيدين وفحص الأهلية بالرقم القومي المصري",
+  "tenant:households:manage": "إدارة ملفات الأسر والتكوين الأسري والظروف المعيشية والسكنية",
+  "tenant:cases:manage": "إنشاء ومتابعة الحالات المعزولة ومسارات المساعدة الخمسة",
+  "tenant:cases:decide_eligibility": "اعتماد قرار الأهلية النهائي وصرف الإعانات المعتمدة",
+  "tenant:cases:recommend_eligibility": "التوصية بقرار الأهلية ورفع تقرير الاستحقاق والاعتماد للمدير",
+  "tenant:cases:read_assigned": "الاطلاع على الحالات المسندة للبحث الميداني أو المراجعة الرقابية",
+  "tenant:research:assign": "إسناد الزيارات الميدانية والأبحاث للباحثين والمتطوعين",
+  "tenant:research:review": "مراجعة واعتماد التقارير الميدانية مع تطبيق قواعد فصل المهام الرقابية SoD",
+  "tenant:research:submit_report": "إجراء الزيارة الميدانية ورفع تقرير الاستحقاق والبيئة المعيشية والدخل",
+  "tenant:attachments:upload_authorized": "رفع المستندات وصور المنزل وبطاقات الهوية المعتمدة",
+  "tenant:donors:manage": "تسجيل بيانات المتبرعين وقنوات الدعم المالي والعيني",
+  "tenant:donations:manage": "إدارة التبرعات وربطها بالمصارف المحددة وتأكيد التحصيل المالي",
+  "tenant:allocations:create": "إجراء الحجز المالي الذري للمساعدات لمنع ازدواج الصرف",
+  "tenant:deliveries:manage": "جدولة وإدارة عمليات تسليم المساعدات للمستحقين",
+  "tenant:deliveries:confirm_assigned": "التأكيد الميداني لتسليم المساعدة وتوثيق الاستلام بالرقم القومي",
+  "tenant:reports:read": "استخراج تقارير الأداء والميزانيات وسجلات الحالات",
+  "tenant:tasks:read_assigned": "عرض قائمة المهام والزيارات الميدانية المسندة",
+  // Beneficiary Portal
+  "portal:profile:manage_own": "عرض وتحديث الملف الشخصي للمستفيد وإدارة موافقة مشاركة البيانات",
+  "portal:requests:create_own": "تقديم طلب مساعدة جديد إلكترونياً بالرقم القومي",
+  "portal:requests:read_own": "متابعة حالة طلبات المساعدة ومراحل البحث الميداني والتسليم",
+  "portal:documents:upload_own": "رفع المستندات الثبوتية والمؤيدة للطلب",
+  "portal:aid_history:read_own_verified": "الاطلاع على سجل المساعدات المستلمة والمجدولة الموثقة",
+  "portal:corrections:submit_own": "تقديم طلب تصحيح بيانات أو تظلم إلكتروني",
+};
+
+export interface RoleGuideItem {
+  code: AuthRoleCode;
+  titleAr: string;
+  badgeClass: string;
+  summaryAr: string;
+  responsibilitiesAr: string[];
+  permissionsCount: number;
+}
+
+export const ROLE_GUIDE_ITEMS_AR: RoleGuideItem[] = [
+  {
+    code: "SUPER_ADMIN",
+    titleAr: "مدير المنصة المركزي (SUPER_ADMIN)",
+    badgeClass: "bg-purple-150 text-purple-900 border-purple-300",
+    summaryAr: "أعلى سلطة رقابية وحوكمة على المنصة، يدير اعتماد الكيانات وتعيين الأدوار لكافة المستخدمين.",
+    responsibilitiesAr: [
+      "اعتماد وتفعيل الجمعيات الخيرية والمبادرات الأهلية",
+      "إضافة وتعديل حسابات المستخدمين وتعيين الأدوار وكلمات المرور",
+      "متابعة سجلات التدقيق الجنائي غير القابلة للتلاعب وتتبع الأحداث",
+      "إدارة مطابقة الرقم القومي ومنع تكرار صرف المساعدات على مستوى الجمهورية",
+    ],
+    permissionsCount: ROLE_PERMISSIONS_MAP.SUPER_ADMIN.length,
+  },
+  {
+    code: "ASSOCIATION_ADMIN",
+    titleAr: "مدير جمعية خيرية مشهرة (ASSOCIATION_ADMIN)",
+    badgeClass: "bg-emerald-100 text-emerald-900 border-emerald-300",
+    summaryAr: "الإدارة الكاملة لأنشطة الجمعية وحالاتها المعزولة وميزانيات التبرعات وعمليات الصرف.",
+    responsibilitiesAr: [
+      "إدارة الحالات المعزولة بنطاق حماية المستأجرين (Row-Level Tenant Isolation)",
+      "تسجيل التبرعات المقيدة وغير المقيدة وتأكيد التحصيل",
+      "إجراء الحجز المالي الذري للحالات المعتمدة لمنع عجز الموازنة",
+      "طلب مشاركة بيانات الحالات المشتركة مع الجمعيات الأخرى",
+    ],
+    permissionsCount: ROLE_PERMISSIONS_MAP.ASSOCIATION_ADMIN.length,
+  },
+  {
+    code: "INDIVIDUAL_INITIATIVE",
+    titleAr: "مبادر فردي مستقل (INDIVIDUAL_INITIATIVE)",
+    badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
+    summaryAr: "إدارة المبادرات التطوعية الفردية المستقلة بنفس معايير الشفافية والحوكمة المصرفية.",
+    responsibilitiesAr: [
+      "إدارة نطاق حالات المبادرة الميدانية والتبرعات المجمعة",
+      "إسناد وتنسيق زيارات المتطوعين الميدانية للأسر المستحقة",
+      "تأكيد تسليم المساعدات وتوثيق الاستلام بالرقم القومي",
+    ],
+    permissionsCount: ROLE_PERMISSIONS_MAP.INDIVIDUAL_INITIATIVE.length,
+  },
+  {
+    code: "RESEARCH_SUPERVISOR",
+    titleAr: "مشرف البحث الاجتماعي (RESEARCH_SUPERVISOR)",
+    badgeClass: "bg-amber-100 text-amber-900 border-amber-300",
+    summaryAr: "جهة رقابية مستقلة تختص بمراجعة الأبحاث الميدانية واعتماد قرار الأهلية مع منع التعدي الرقابي (SoD).",
+    responsibilitiesAr: [
+      "إسناد طلبات المساعدة الميدانية للباحثين والمتطوعين",
+      "مراجعة تقارير البحث الاجتماعي وتقدير فجوة الاحتياج المالي",
+      "اعتماد قرار الاستحقاق أو طلب إعادة البحث الميداني",
+      "تطبيق قاعدة SoD: حظر اعتماد تقرير باحث قام المشرف بكتابته بنفسه",
+    ],
+    permissionsCount: ROLE_PERMISSIONS_MAP.RESEARCH_SUPERVISOR.length,
+  },
+  {
+    code: "VOLUNTEER",
+    titleAr: "باحث / متطوع ميداني (VOLUNTEER)",
+    badgeClass: "bg-teal-100 text-teal-900 border-teal-300",
+    summaryAr: "الذراع الميداني للمنصة لإجراء المعاينات الواقعية وحصر الدخل والمصروفات والتسليم.",
+    responsibilitiesAr: [
+      "إجراء الزيارات الميدانية لمنازل المستفيدين ومعاينة المسكن",
+      "حصر دخل الأسرة ومصروفاتها الحتمية والديون المتراكمة",
+      "رفع التقرير الميداني والتوصيات الأولية للمشرف",
+      "التأكيد الميداني لتسليم المساعدات العينية والنقدية للمستحقين",
+    ],
+    permissionsCount: ROLE_PERMISSIONS_MAP.VOLUNTEER.length,
+  },
+  {
+    code: "BENEFICIARY",
+    titleAr: "مستفيد / طالب مساعدة (BENEFICIARY)",
+    badgeClass: "bg-rose-100 text-rose-900 border-rose-300",
+    summaryAr: "بوابة المواطن المستحق للتسجيل ومتابعة الطلبات وحوكمة بياناته الشخصية.",
+    responsibilitiesAr: [
+      "الاطلاع على الملف الشخصي الموحد وبيانات الأسرة",
+      "تقديم طلب مساعدة إلكتروني بالرقم القومي",
+      "متابعة مسار الطلب من البحث الميداني وحتى التسليم",
+      "إدارة موافقة مشاركة البيانات (Consent Management) لحماية الخصوصية",
+    ],
+    permissionsCount: ROLE_PERMISSIONS_MAP.BENEFICIARY.length,
+  },
+];
+
 export interface FieldValidationResult {
   isValid: boolean;
   messageAr: string;

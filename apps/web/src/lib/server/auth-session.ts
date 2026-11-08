@@ -1,13 +1,20 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
+import {
+  type AuthRoleCode,
+  ROLE_PERMISSIONS_MAP,
+  ROLE_LABELS_AR,
+  PERMISSION_DESCRIPTIONS_AR,
+  ROLE_GUIDE_ITEMS_AR,
+} from "../domain/sanad-rules";
 
-export type AuthRoleCode =
-  | "SUPER_ADMIN"
-  | "ASSOCIATION_ADMIN"
-  | "INDIVIDUAL_INITIATIVE"
-  | "RESEARCH_SUPERVISOR"
-  | "VOLUNTEER"
-  | "BENEFICIARY";
+export {
+  type AuthRoleCode,
+  ROLE_PERMISSIONS_MAP,
+  ROLE_LABELS_AR,
+  PERMISSION_DESCRIPTIONS_AR,
+  ROLE_GUIDE_ITEMS_AR,
+};
 
 export interface SanadSessionPayload {
   userId: string;
@@ -25,84 +32,6 @@ export interface SanadSessionPayload {
 }
 
 export const SESSION_COOKIE_NAME = "sanad_session";
-
-export const ROLE_PERMISSIONS_MAP: Record<AuthRoleCode, string[]> = {
-  SUPER_ADMIN: [
-    "platform:tenants:approve",
-    "platform:users:manage",
-    "platform:reference_data:manage",
-    "platform:audit:read",
-    "platform:stats:read",
-    "tenant:members:manage",
-    "tenant:beneficiaries:manage",
-    "tenant:households:manage",
-    "tenant:cases:manage",
-    "tenant:cases:decide_eligibility",
-    "tenant:research:assign",
-    "tenant:research:review",
-    "tenant:donors:manage",
-    "tenant:donations:manage",
-    "tenant:allocations:create",
-    "tenant:deliveries:manage",
-    "tenant:reports:read",
-  ],
-  ASSOCIATION_ADMIN: [
-    "tenant:members:manage",
-    "tenant:beneficiaries:manage",
-    "tenant:households:manage",
-    "tenant:cases:manage",
-    "tenant:cases:decide_eligibility",
-    "tenant:research:assign",
-    "tenant:research:review",
-    "tenant:donors:manage",
-    "tenant:donations:manage",
-    "tenant:allocations:create",
-    "tenant:deliveries:manage",
-    "tenant:reports:read",
-  ],
-  INDIVIDUAL_INITIATIVE: [
-    "tenant:beneficiaries:manage",
-    "tenant:households:manage",
-    "tenant:cases:manage",
-    "tenant:cases:decide_eligibility",
-    "tenant:research:assign",
-    "tenant:research:review",
-    "tenant:donors:manage",
-    "tenant:donations:manage",
-    "tenant:allocations:create",
-    "tenant:deliveries:manage",
-    "tenant:reports:read",
-  ],
-  RESEARCH_SUPERVISOR: [
-    "tenant:cases:read_assigned",
-    "tenant:research:assign",
-    "tenant:research:review",
-    "tenant:cases:recommend_eligibility",
-  ],
-  VOLUNTEER: [
-    "tenant:tasks:read_assigned",
-    "tenant:research:submit_report",
-    "tenant:attachments:upload_authorized",
-    "tenant:deliveries:confirm_assigned",
-  ],
-  BENEFICIARY: [
-    "portal:profile:manage_own",
-    "portal:requests:create_own",
-    "portal:requests:read_own",
-    "portal:documents:upload_own",
-    "portal:aid_history:read_own_verified",
-    "portal:corrections:submit_own",
-  ],
-};
-
-export const ROLE_LABELS_AR: Record<AuthRoleCode, string> = {
-  SUPER_ADMIN: "مدير المنصة المركزي",
-  ASSOCIATION_ADMIN: "مدير جمعية خيرية",
-  INDIVIDUAL_INITIATIVE: "مبادر فردي مستقل",
-  RESEARCH_SUPERVISOR: "مشرف البحث الاجتماعي",
-  VOLUNTEER: "باحث / متطوع ميداني",
-  BENEFICIARY: "مستفيد",
-};
 
 function getSessionSecret(): string {
   return (

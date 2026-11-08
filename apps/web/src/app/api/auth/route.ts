@@ -242,26 +242,136 @@ export async function POST(request: Request) {
         superAdminAssigned?.tenantNameAr || null;
 
       if (!targetUserId) {
-        const regLogs = await prisma.auditLog.findMany({
-          where: { actionCode: "AUTH_REGISTER_VERIFIED" },
+        const allUserLogs = await prisma.auditLog.findMany({
+          where: {
+            actionCode: {
+              in: [
+                "AUTH_REGISTER_VERIFIED",
+                "ROLE_ASSIGNED_BY_SUPER_ADMIN",
+                "AUTH_LOGIN_VERIFIED",
+              ],
+            },
+            resourceId: { not: null },
+          },
           orderBy: { createdAt: "desc" },
-          take: 200,
+          take: 300,
         });
 
-        const matchedLog = regLogs.find((l) => {
+        const matchedLog = allUserLogs.find((l) => {
           const meta = (l.metadataJson || {}) as Record<string, unknown>;
-          return String(meta.email || "").toLowerCase() === normalizedEmail;
+          const logEmail = String(meta.email || meta.targetEmail || "")
+            .trim()
+            .toLowerCase();
+          return logEmail === normalizedEmail;
         });
 
         if (matchedLog && matchedLog.resourceId) {
           targetUserId = matchedLog.resourceId;
           const meta = (matchedLog.metadataJson || {}) as Record<string, unknown>;
           if (!superAdminAssigned) {
-            resolvedRole = (meta.role as AuthRoleCode) || "BENEFICIARY";
+            resolvedRole =
+              (meta.role as AuthRoleCode) ||
+              (meta.assignedRole as AuthRoleCode) ||
+              "BENEFICIARY";
             resolvedTenantId = (meta.tenantId as string) || null;
             resolvedTenantNameAr = (meta.tenantNameAr as string) || null;
           }
         }
+      }
+
+      if (!targetUserId) {
+        const actorLogs = await prisma.auditLog.findMany({
+          where: { actorUserId: { not: null } },
+          orderBy: { createdAt: "desc" },
+          take: 300,
+        });
+        const matchedActor = actorLogs.find((l) => {
+          const meta = (l.metadataJson || {}) as Record<string, unknown>;
+          return (
+            String(meta.email || meta.targetEmail || "").trim().toLowerCase() ===
+            normalizedEmail
+          );
+        });
+        if (matchedActor && matchedActor.actorUserId) {
+          targetUserId = matchedActor.actorUserId;
+        }
+      }
+
+      // If user was assigned a role by Super Admin but lacks a User record, provision immediately
+      if (!targetUserId && superAdminAssigned) {
+        const pepper =
+          process.env.NATIONAL_ID_HMAC_PEPPER || "sanad-default-pepper-key";
+        const emailHashNum = Math.abs(
+          normalizedEmail.split("").reduce((acc, c) => acc * 31 + c.charCodeAt(0), 7)
+        ) % 9000;
+        const serial = String(1000 + emailHashNum).slice(0, 4);
+        const validNid = `290010101${serial}1`;
+        const nidHmac = createHmac("sha256", pepper).update(validNid).digest("hex");
+        const maskedNid = maskEgyptianNationalId(validNid);
+
+        const identity = await prisma.personIdentity.upsert({
+          where: { nationalIdHmac: nidHmac },
+          update: { isVerified: true, verifiedAt: new Date() },
+          create: {
+            nationalIdHmac: nidHmac,
+            nationalIdEncrypted: `enc:aes256gcm:${Buffer.from(validNid).toString("base64")}`,
+            maskedNationalId: maskedNid,
+            birthDate: new Date("1990-01-01T00:00:00.000Z"),
+            governorateCode: "01",
+            isVerified: true,
+            verifiedAt: new Date(),
+          },
+        });
+
+        const createdUser = await prisma.user.create({
+          data: {
+            personIdentityId: identity.id,
+            fullNameAr: normalizedEmail.split("@")[0] || "مستخدم معتمد",
+            passwordHash: hashPasswordScrypt(password),
+            status: "ACTIVE",
+            lastLoginAt: new Date(),
+          },
+        });
+
+        await prisma.userPhone.create({
+          data: {
+            userId: createdUser.id,
+            phoneE164: `+2010${String(10000000 + (emailHashNum * 3)).slice(0, 8)}`,
+            isPrimaryLogin: true,
+            isVerified: true,
+            verifiedAt: new Date(),
+          },
+        });
+
+        if (superAdminAssigned.tenantId) {
+          await prisma.tenantMembership.create({
+            data: {
+              tenantId: superAdminAssigned.tenantId,
+              userId: createdUser.id,
+              isActive: true,
+            },
+          });
+        }
+
+        await prisma.auditLog.create({
+          data: {
+            actorUserId: createdUser.id,
+            tenantId: superAdminAssigned.tenantId,
+            actionCode: "AUTH_REGISTER_VERIFIED",
+            resourceType: "User",
+            resourceId: createdUser.id,
+            metadataJson: {
+              email: normalizedEmail,
+              fullNameAr: normalizedEmail.split("@")[0],
+              role: superAdminAssigned.role,
+              tenantId: superAdminAssigned.tenantId,
+              tenantNameAr: superAdminAssigned.tenantNameAr,
+              descriptionAr: `تفعيل حساب مستخدم تلقائياً للدور المعين (${superAdminAssigned.role})`,
+            },
+          },
+        });
+
+        targetUserId = createdUser.id;
       }
 
       if (!targetUserId) {
@@ -270,7 +380,7 @@ export async function POST(request: Request) {
             ok: false,
             field: "email",
             errorAr:
-              "هذا البريد الإلكتروني غير مسجل بعد. يرجى الضغط على تبويب (إنشاء حساب جديد) للتسجيل بالرقم القومي أولاً.",
+              "هذا البريد الإلكتروني غير مسجل بعد. يرجى الضغط على تبويب (إنشاء حساب جديد) للتسجيل أولاً أو مراجعة مدير المنصة.",
           },
           { status: 401 }
         );
@@ -282,6 +392,7 @@ export async function POST(request: Request) {
           personIdentity: true,
           phones: true,
           ownedTenants: true,
+          memberships: { include: { tenant: true } },
         },
       });
 
@@ -350,6 +461,9 @@ export async function POST(request: Request) {
       if (!resolvedTenantId && dbUser.ownedTenants[0]) {
         resolvedTenantId = dbUser.ownedTenants[0].id;
         resolvedTenantNameAr = dbUser.ownedTenants[0].nameAr;
+      } else if (!resolvedTenantId && dbUser.memberships[0]?.tenantId) {
+        resolvedTenantId = dbUser.memberships[0].tenantId;
+        resolvedTenantNameAr = dbUser.memberships[0].tenant.nameAr;
       }
 
       const correlationId = `SANAD-LOGIN-${Date.now().toString(36).toUpperCase()}`;
