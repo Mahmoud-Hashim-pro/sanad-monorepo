@@ -8,12 +8,15 @@ import {
   type MockCase,
   type MockDonation,
   type MockDelivery,
+  type MockSharingRequest,
   type MockAuditLog,
+  type MockConsentItem,
   type TenantStatus,
 } from "../../../lib/mock-data/fictional-seed";
 import { maskEgyptianNationalId } from "../../../lib/domain/sanad-rules";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function mapDbCategoryToFrontend(cat?: string | null): AidCategoryCode {
   switch (cat) {
@@ -59,41 +62,59 @@ export async function GET() {
   }
 
   try {
-    const [dbTenants, dbCases, dbDonations, dbDeliveries, dbAuditLogs] =
-      await Promise.all([
-        prisma.tenant.findMany({
-          include: {
-            cases: true,
-            donations: true,
-            tenantBeneficiaries: true,
-          },
-          orderBy: { createdAt: "asc" },
-        }),
-        prisma.case.findMany({
-          include: {
-            beneficiary: { include: { personIdentity: true } },
-            household: true,
-            assistanceRequests: true,
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.donation.findMany({
-          include: { donor: true },
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.aidDelivery.findMany({
-          include: {
-            beneficiary: true,
-            assistanceRequest: { include: { case: true } },
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.auditLog.findMany({
-          include: { actor: true },
-          orderBy: { createdAt: "desc" },
-          take: 40,
-        }),
-      ]);
+    const [
+      dbTenants,
+      dbCases,
+      dbDonations,
+      dbDeliveries,
+      dbSharingRequests,
+      dbConsents,
+      dbAuditLogs,
+    ] = await Promise.all([
+      prisma.tenant.findMany({
+        include: {
+          cases: true,
+          donations: true,
+          tenantBeneficiaries: true,
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.case.findMany({
+        include: {
+          beneficiary: { include: { personIdentity: true } },
+          household: true,
+          assistanceRequests: true,
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.donation.findMany({
+        include: { donor: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.aidDelivery.findMany({
+        include: {
+          beneficiary: true,
+          assistanceRequest: { include: { case: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.dataSharingRequest.findMany({
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.consentRecord.findMany({
+        orderBy: { grantedAt: "desc" },
+      }),
+      prisma.auditLog.findMany({
+        include: { actor: true },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+    ]);
+
+    const tenantMap = new Map(dbTenants.map((t) => [t.id, t]));
+    const beneficiaryMap = new Map(
+      dbCases.map((c) => [c.beneficiaryId, c.beneficiary])
+    );
 
     const tenants: MockTenant[] = dbTenants.map((t) => {
       const confirmedPiasters = t.donations
@@ -140,16 +161,24 @@ export async function GET() {
         ""
       );
 
+      const socialMeta = (c.household?.socialConditionsJson || {}) as Record<
+        string,
+        unknown
+      >;
+
       return {
         id: c.id,
         tenantId: c.tenantId,
         caseNumber: c.caseNumber,
         beneficiaryNameAr: cleanName,
-        nationalId: "27905151601234",
+        nationalId: c.beneficiary.personIdentity.maskedNationalId,
         maskedNationalId: c.beneficiary.personIdentity.maskedNationalId,
         phoneE164: c.beneficiary.primaryContactPhone,
-        householdCode: c.household?.householdCode || "GH-HH-2026-001",
-        governorate: c.household?.governorate || "الغربية",
+        householdCode: c.household?.householdCode || `HH-${c.caseNumber}`,
+        governorate:
+          c.household?.governorate ||
+          tenantMap.get(c.tenantId)?.governorate ||
+          "الغربية",
         targetType: req?.targetType === "PERSON" ? "PERSON" : "HOUSEHOLD",
         category: feCat,
         categoryAr: AID_CATEGORIES_LABELS[feCat],
@@ -160,6 +189,10 @@ export async function GET() {
             ? "RESEARCH_SUBMITTED"
             : c.caseStatus === "REJECTED"
             ? "REJECTED"
+            : c.caseStatus === "CLOSED"
+            ? "COMPLETED"
+            : c.caseStatus === "RESEARCH_IN_PROGRESS" || c.caseStatus === "ASSIGNED"
+            ? "UNDER_RESEARCH"
             : "NEW",
         researchStatus:
           c.researchStatus === "REVIEWED"
@@ -168,7 +201,9 @@ export async function GET() {
             ? "SUBMITTED"
             : c.researchStatus === "NEEDS_REVISION"
             ? "NEEDS_REVISION"
-            : "ASSIGNED",
+            : c.researchStatus === "ASSIGNED"
+            ? "ASSIGNED"
+            : "NOT_ASSIGNED",
         eligibilityDecision:
           c.eligibilityDecision === "ELIGIBLE"
             ? "ELIGIBLE"
@@ -178,7 +213,12 @@ export async function GET() {
             ? "INELIGIBLE"
             : "PENDING",
         allocationStatus:
-          req?.allocationStatus === "FULLY_ALLOCATED" ? "RESERVED" : "UNALLOCATED",
+          req?.allocationStatus === "DISBURSED"
+            ? "DISBURSED"
+            : req?.allocationStatus === "FULLY_ALLOCATED" ||
+              req?.allocationStatus === "RESERVED"
+            ? "RESERVED"
+            : "UNALLOCATED",
         deliveryStatus:
           req?.deliveryStatus === "CONFIRMED"
             ? "CONFIRMED"
@@ -187,9 +227,11 @@ export async function GET() {
             : "PENDING",
         requestedEgp,
         approvedEgp,
-        assignedVolunteerAr: "أحمد سامي الكيلاني",
-        assignedVolunteerId: "user-vol-ahmed",
-        supervisorAr: "د. منى الشاذلي",
+        assignedVolunteerAr:
+          (socialMeta.assignedVolunteerAr as string) || "أحمد سامي الكيلاني",
+        assignedVolunteerId:
+          (socialMeta.assignedVolunteerId as string) || "user-vol-ahmed",
+        supervisorAr: (socialMeta.supervisorAr as string) || "د. منى الشاذلي",
         householdIncomeEgp: c.household
           ? Math.round(Number(c.household.monthlyIncomePiasters) / 100)
           : 1800,
@@ -199,7 +241,7 @@ export async function GET() {
         researchNotesAr:
           req?.descriptionAr ||
           c.titleAr.replace(/\s*\(بيانات (تجريبية|خيالية)\)/g, ""),
-        reportVersion: 1,
+        reportVersion: Number(socialMeta.reportVersion || 1),
       };
     });
 
@@ -261,6 +303,69 @@ export async function GET() {
         : undefined,
     }));
 
+    const sharingRequests: MockSharingRequest[] = dbSharingRequests.map((sr) => {
+      const scopeObj = (sr.requestedScopeJson || {}) as Record<string, string>;
+      const ben = beneficiaryMap.get(sr.beneficiaryId);
+      return {
+        id: sr.id,
+        requestingTenantNameAr:
+          tenantMap.get(sr.requestingTenantId)?.nameAr ||
+          scopeObj.requestingTenantNameAr ||
+          "جهة شريكة معتمدة",
+        owningTenantNameAr:
+          tenantMap.get(sr.owningTenantId)?.nameAr ||
+          scopeObj.owningTenantNameAr ||
+          "الجهة المالكة للملف",
+        beneficiaryNameAr:
+          ben?.fullNameAr || scopeObj.beneficiaryNameAr || "مستفيد مسجل",
+        maskedNationalId:
+          ben?.personIdentity.maskedNationalId ||
+          scopeObj.maskedNationalId ||
+          "279051516****4",
+        scopeAr:
+          scopeObj.scopeAr ||
+          "الاطلاع على قرار الأهلية وتقرير البحث الميداني لمنع ازدواج الصرف",
+        status:
+          sr.status === "APPROVED"
+            ? "APPROVED"
+            : sr.status === "DENIED"
+            ? "DENIED"
+            : "PENDING",
+      };
+    });
+
+    const consents: MockConsentItem[] = dbConsents.map((cr) => {
+      const titleMap: Record<string, { titleAr: string; descriptionAr: string }> = {
+        SHARE_ELIGIBILITY_SUMMARY: {
+          titleAr: "مشاركة ملخص الحالة الاجتماعية مع المبادرات الطبية الشريكة",
+          descriptionAr:
+            "السماح للجهات الخيرية المعتمدة على منصة سَنَد بالاطلاع على قرار الأهلية فقط عند طلب مساهمة علاجية مشتركة دون كشف الرقم القومي الكامل.",
+        },
+        SMS_DELIVERY_NOTIFICATIONS: {
+          titleAr: "إشعارات الرسائل القصيرة (SMS) عند جدولة تسليم المساعدات",
+          descriptionAr:
+            "استلام رسائل نصية على الهاتف المحمول الموثق بمواعيد الزيارات الميدانية وإيصالات التسليم.",
+        },
+        SHARE_MEDICAL_ATTACHMENTS: {
+          titleAr: "مشاركة المستندات الطبية المرفقة مع الصناديق العلاجية المتخصصة",
+          descriptionAr:
+            "إتاحة التقارير الطبية المرفقة للجان الطبية في الجمعيات الشريكة لتسريع اعتماد العمليات الجراحية.",
+        },
+      };
+      const meta = titleMap[cr.consentType] || {
+        titleAr: `موافقة مشاركة البيانات (${cr.consentType})`,
+        descriptionAr: "تحكم مباشر للمستفيد في صلاحيات مشاركة بيانات ملفه.",
+      };
+      return {
+        id: cr.id,
+        titleAr: meta.titleAr,
+        descriptionAr: meta.descriptionAr,
+        scopeCode: cr.consentType,
+        granted: cr.isGranted,
+        updatedAt: (cr.revokedAt || cr.grantedAt).toISOString().slice(0, 10),
+      };
+    });
+
     const auditLogs: MockAuditLog[] = dbAuditLogs.map((log) => {
       const meta = (log.metadataJson || {}) as Record<string, unknown>;
       return {
@@ -274,9 +379,9 @@ export async function GET() {
         actionCode: log.actionCode,
         descriptionAr:
           (meta.descriptionAr as string) ||
-          `تنفيذ عملية (${log.actionCode}) على (${log.resourceType}) في قاعدة بيانات Neon PostgreSQL`,
+          `عملية (${log.actionCode}) على (${log.resourceType})`,
         tenantNameAr:
-          (meta.tenantNameAr as string) || "قاعدة بيانات المنصة المركزية (Neon DB)",
+          (meta.tenantNameAr as string) || "منصة سَنَد المركزية",
       };
     });
 
@@ -287,6 +392,8 @@ export async function GET() {
       cases,
       donations,
       deliveries,
+      sharingRequests,
+      consents,
       auditLogs,
       timestamp: new Date().toISOString(),
     });
@@ -342,7 +449,28 @@ export async function POST(request: Request) {
           },
         });
       }
-    } else if (action === "CREATE_CASE") {
+    } else if (action === "DECIDE_SHARING_REQUEST") {
+      const requestId = String(p.requestId || "");
+      const decision = p.decision === "APPROVED" ? "APPROVED" : "DENIED";
+      await prisma.dataSharingRequest.updateMany({
+        where: { id: requestId },
+        data: { status: decision },
+      });
+    } else if (action === "TOGGLE_CONSENT") {
+      const consentId = String(p.consentId || "");
+      const existing = await prisma.consentRecord.findUnique({
+        where: { id: consentId },
+      });
+      if (existing) {
+        await prisma.consentRecord.update({
+          where: { id: consentId },
+          data: {
+            isGranted: !existing.isGranted,
+            revokedAt: existing.isGranted ? new Date() : null,
+          },
+        });
+      }
+    } else if (action === "CREATE_CASE" || action === "SUBMIT_BENEFICIARY_REQUEST") {
       const nationalId = String(p.nationalId || "28501011601234");
       const pepper = process.env.NATIONAL_ID_HMAC_PEPPER || "sanad-default-pepper-key";
       const nationalIdHmac = createHmac("sha256", pepper)
@@ -379,18 +507,37 @@ export async function POST(request: Request) {
         })) || (await prisma.tenant.findFirst());
 
       if (dbTenant) {
-        const caseNumber = String(p.caseNumber || `CASE-2026-${Date.now().toString().slice(-4)}`);
+        const caseNumber = String(
+          p.caseNumber || `CASE-2026-${Date.now().toString().slice(-4)}`
+        );
+        const householdCode = `HH-${caseNumber}`;
+        const household = await prisma.household.create({
+          data: {
+            tenantId: dbTenant.id,
+            householdCode,
+            governorate: String(p.governorate || dbTenant.governorate || "الغربية"),
+            cityOrCenterAr: String(p.governorate || dbTenant.governorate || "الغربية"),
+            addressDetailsAr: "عنوان مسجل بملف الحالة",
+            primaryContactPhone: String(p.phoneE164 || "+201000000000"),
+            monthlyIncomePiasters: 240000n,
+            monthlyExpensesPiasters: BigInt(
+              Math.round((2400 + (Number(p.requestedEgp) || 2500)) * 100)
+            ),
+          },
+        });
+
         const createdCase = await prisma.case.create({
           data: {
             tenantId: dbTenant.id,
             beneficiaryId: beneficiary.id,
+            householdId: household.id,
             caseNumber,
             titleAr:
               AID_CATEGORIES_LABELS[
                 (p.category as AidCategoryCode) || "MONTHLY_FOOD"
               ] || "طلب مساعدة",
             caseStatus: "SUBMITTED",
-            researchStatus: "ASSIGNED",
+            researchStatus: "NOT_STARTED",
             priorityLevel: "HIGH",
           },
         });
@@ -400,11 +547,12 @@ export async function POST(request: Request) {
             tenantId: dbTenant.id,
             caseId: createdCase.id,
             beneficiaryId: beneficiary.id,
+            householdId: household.id,
             requestNumber: `REQ-${Date.now().toString().slice(-6)}`,
             targetType: p.targetType === "PERSON" ? "PERSON" : "HOUSEHOLD",
             category: mapFrontendCategoryToDb(String(p.category || "MONTHLY_FOOD")),
             descriptionAr: String(
-              p.notesAr || "ملف حالة مسجل بالرقم القومي ومحال للبحث الاجتماعي"
+              p.notesAr || "ملف حالة مسجل بالرقم القومي وبانتظار البحث الميداني"
             ),
             requestedAmountPiasters: BigInt(
               Math.round((Number(p.requestedEgp) || 2500) * 100)
@@ -448,6 +596,222 @@ export async function POST(request: Request) {
             availableAmountPiasters: isConfirmed ? amountPiasters : 0n,
           },
         });
+      }
+    } else if (action === "CONFIRM_DONATION") {
+      const donationId = String(p.donationId || "");
+      const existing = await prisma.donation.findUnique({
+        where: { id: donationId },
+      });
+      if (existing) {
+        await prisma.donation.update({
+          where: { id: donationId },
+          data: {
+            status: "CONFIRMED",
+            availableAmountPiasters: existing.totalAmountPiasters,
+            confirmedAt: new Date(),
+          },
+        });
+      }
+    } else if (action === "ALLOCATE_ATOMIC") {
+      const donationId = String(p.donationId || "");
+      const caseId = String(p.caseId || "");
+      const amountPiasters = BigInt(
+        Math.round((Number(p.amountEgp) || 1000) * 100)
+      );
+
+      const [donation, targetCase, actor] = await Promise.all([
+        prisma.donation.findUnique({ where: { id: donationId } }),
+        prisma.case.findUnique({
+          where: { id: caseId },
+          include: { assistanceRequests: true },
+        }),
+        prisma.user.findFirst({ orderBy: { createdAt: "asc" } }),
+      ]);
+
+      if (donation && targetCase && actor) {
+        const nextAvail =
+          donation.availableAmountPiasters > amountPiasters
+            ? donation.availableAmountPiasters - amountPiasters
+            : 0n;
+        const nextReserved = donation.reservedAmountPiasters + amountPiasters;
+
+        await prisma.donation.update({
+          where: { id: donation.id },
+          data: {
+            availableAmountPiasters: nextAvail,
+            reservedAmountPiasters: nextReserved,
+            status: nextAvail === 0n ? "FULLY_ALLOCATED" : "PARTIALLY_ALLOCATED",
+          },
+        });
+
+        const req = targetCase.assistanceRequests[0];
+        if (req) {
+          await prisma.assistanceRequest.update({
+            where: { id: req.id },
+            data: {
+              approvedAmountPiasters: amountPiasters,
+              allocationStatus: "RESERVED",
+              deliveryStatus: "SCHEDULED",
+            },
+          });
+
+          const alloc = await prisma.allocation.create({
+            data: {
+              tenantId: donation.tenantId,
+              donationId: donation.id,
+              assistanceRequestId: req.id,
+              status: "RESERVED",
+              allocatedAmountPiasters: amountPiasters,
+              createdByUserId: actor.id,
+            },
+          });
+
+          await prisma.aidDelivery.create({
+            data: {
+              tenantId: donation.tenantId,
+              allocationId: alloc.id,
+              assistanceRequestId: req.id,
+              beneficiaryId: targetCase.beneficiaryId,
+              householdId: targetCase.householdId,
+              targetType: req.targetType,
+              status: "SCHEDULED",
+              deliveredAmountPiasters: amountPiasters,
+              unitAr: "جنيه مصري",
+              authorizedDescriptionAr: `صرف مخصص (${targetCase.titleAr}) من الإيصال ${donation.receiptNumber}`,
+              scheduledAt: new Date(),
+              idempotencyKey: `IDEMP-ALLOC-${Date.now().toString(36).toUpperCase()}`,
+            },
+          });
+        }
+      }
+    } else if (action === "ASSIGN_VOLUNTEER") {
+      const caseId = String(p.caseId || "");
+      const existingCase = await prisma.case.findUnique({
+        where: { id: caseId },
+        include: { household: true },
+      });
+      if (existingCase) {
+        await prisma.case.update({
+          where: { id: caseId },
+          data: {
+            researchStatus: "ASSIGNED",
+            caseStatus:
+              existingCase.caseStatus === "SUBMITTED" ||
+              existingCase.caseStatus === "DRAFT"
+                ? "ASSIGNED"
+                : existingCase.caseStatus,
+          },
+        });
+        if (existingCase.householdId) {
+          const prevMeta = (existingCase.household?.socialConditionsJson ||
+            {}) as Record<string, unknown>;
+          await prisma.household.update({
+            where: { id: existingCase.householdId },
+            data: {
+              socialConditionsJson: {
+                ...prevMeta,
+                assignedVolunteerId: String(p.volunteerId || ""),
+                assignedVolunteerAr: String(p.volunteerNameAr || ""),
+              },
+            },
+          });
+        }
+      }
+    } else if (action === "REVIEW_DECISION") {
+      const caseId = String(p.caseId || "");
+      const decision = String(p.decision || "ELIGIBLE");
+      if (decision === "NEEDS_REVISION") {
+        await prisma.case.updateMany({
+          where: { id: caseId },
+          data: {
+            researchStatus: "NEEDS_REVISION",
+            caseStatus: "RESEARCH_IN_PROGRESS",
+          },
+        });
+      } else {
+        await prisma.case.updateMany({
+          where: { id: caseId },
+          data: {
+            researchStatus: "REVIEWED",
+            eligibilityDecision:
+              decision === "INELIGIBLE"
+                ? "INELIGIBLE"
+                : decision === "CONDITIONAL"
+                ? "CONDITIONAL"
+                : "ELIGIBLE",
+            caseStatus: decision === "INELIGIBLE" ? "REJECTED" : "APPROVED",
+          },
+        });
+      }
+    } else if (action === "SUBMIT_FIELD_REPORT") {
+      const caseId = String(p.caseId || "");
+      const existingCase = await prisma.case.findUnique({
+        where: { id: caseId },
+        include: { household: true, assistanceRequests: true },
+      });
+      if (existingCase) {
+        await prisma.case.update({
+          where: { id: caseId },
+          data: {
+            researchStatus: "SUBMITTED",
+            caseStatus: "RESEARCH_SUBMITTED",
+          },
+        });
+        if (existingCase.householdId) {
+          const prevMeta = (existingCase.household?.socialConditionsJson ||
+            {}) as Record<string, unknown>;
+          const nextVersion = Number(prevMeta.reportVersion || 1) + 1;
+          await prisma.household.update({
+            where: { id: existingCase.householdId },
+            data: {
+              monthlyIncomePiasters: BigInt(
+                Math.round((Number(p.incomeEgp) || 2000) * 100)
+              ),
+              monthlyExpensesPiasters: BigInt(
+                Math.round((Number(p.expensesEgp) || 4500) * 100)
+              ),
+              socialConditionsJson: {
+                ...prevMeta,
+                reportVersion: nextVersion,
+              },
+            },
+          });
+        }
+        const req = existingCase.assistanceRequests[0];
+        if (req && p.notesAr) {
+          await prisma.assistanceRequest.update({
+            where: { id: req.id },
+            data: { descriptionAr: String(p.notesAr) },
+          });
+        }
+      }
+    } else if (action === "CONFIRM_DELIVERY") {
+      const deliveryId = String(p.deliveryId || "");
+      const deliv = await prisma.aidDelivery.findUnique({
+        where: { id: deliveryId },
+        include: { assistanceRequest: true },
+      });
+      if (deliv) {
+        await prisma.aidDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: "CONFIRMED",
+            confirmedAt: new Date(),
+          },
+        });
+        await prisma.assistanceRequest.update({
+          where: { id: deliv.assistanceRequestId },
+          data: {
+            deliveryStatus: "CONFIRMED",
+            allocationStatus: "DISBURSED",
+          },
+        });
+        if (deliv.assistanceRequest.caseId) {
+          await prisma.case.update({
+            where: { id: deliv.assistanceRequest.caseId },
+            data: { caseStatus: "CLOSED" },
+          });
+        }
       }
     }
 

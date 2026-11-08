@@ -582,6 +582,58 @@ async function main() {
     },
   });
 
+  await prisma.dataSharingRequest.upsert({
+    where: { id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01" },
+    update: {},
+    create: {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01",
+      requestingTenantId: dakahliaTenant.id,
+      owningTenantId: gharbiaTenant.id,
+      beneficiaryId: beneficiary.id,
+      requestedScopeJson: {
+        scopeAr:
+          "الاطلاع على تقرير البحث الميداني والاحتياج الطبي لمنع ازدواج الصرف والمساهمة المشتركة",
+      },
+      status: "PENDING",
+    },
+  });
+
+  await prisma.consentRecord.upsert({
+    where: { id: "ffffffff-ffff-4fff-8fff-ffffffffff01" },
+    update: {},
+    create: {
+      id: "ffffffff-ffff-4fff-8fff-ffffffffff01",
+      beneficiaryId: beneficiary.id,
+      tenantId: gharbiaTenant.id,
+      consentType: "SHARE_ELIGIBILITY_SUMMARY",
+      isGranted: true,
+    },
+  });
+
+  await prisma.consentRecord.upsert({
+    where: { id: "ffffffff-ffff-4fff-8fff-ffffffffff02" },
+    update: {},
+    create: {
+      id: "ffffffff-ffff-4fff-8fff-ffffffffff02",
+      beneficiaryId: beneficiary.id,
+      tenantId: gharbiaTenant.id,
+      consentType: "SMS_DELIVERY_NOTIFICATIONS",
+      isGranted: true,
+    },
+  });
+
+  await prisma.consentRecord.upsert({
+    where: { id: "ffffffff-ffff-4fff-8fff-ffffffffff03" },
+    update: {},
+    create: {
+      id: "ffffffff-ffff-4fff-8fff-ffffffffff03",
+      beneficiaryId: beneficiary.id,
+      tenantId: gharbiaTenant.id,
+      consentType: "SHARE_MEDICAL_ATTACHMENTS",
+      isGranted: false,
+    },
+  });
+
   console.log("تم تحديث وتوثيق الأدوار والصلاحيات والجهات والحالات والتبرعات بنجاح.");
 }
 

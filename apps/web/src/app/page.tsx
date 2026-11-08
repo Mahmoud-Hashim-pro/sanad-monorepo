@@ -1,16 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import Link from "next/link";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   AID_CATEGORIES_LABELS,
-  FICTIONAL_TENANTS,
-  FICTIONAL_CASES,
-  FICTIONAL_DONATIONS,
-  FICTIONAL_DELIVERIES,
-  FICTIONAL_SHARING_REQUESTS,
-  FICTIONAL_AUDIT_LOGS,
-  FICTIONAL_CONSENTS,
   type AidCategoryCode,
   type MockTenant,
   type MockCase,
@@ -27,7 +19,6 @@ import {
   canApproveResearchReport,
   validateAllocationRequest,
 } from "../lib/domain/sanad-rules";
-import { DatabaseSetupModal } from "../components/DatabaseSetupModal";
 import { SuperAdminWorkspace } from "../components/SuperAdminWorkspace";
 import { TenantAdminWorkspace } from "../components/TenantAdminWorkspace";
 import { ResearchSupervisorWorkspace } from "../components/ResearchSupervisorWorkspace";
@@ -47,33 +38,24 @@ type ActiveRoleView =
   | "BENEFICIARY"
   | "AUTH_LOGIN_REGISTER";
 
-const STORAGE_KEY = "sanad_live_state_v3";
-
-export default function SanadWorkspacePreviewPage() {
+export default function SanadDynamicPlatformPage() {
   const [activeView, setActiveView] = useState<ActiveRoleView>("AUTH_LOGIN_REGISTER");
-  const [tenants, setTenants] = useState<MockTenant[]>(FICTIONAL_TENANTS);
-  const [cases, setCases] = useState<MockCase[]>(FICTIONAL_CASES);
-  const [donations, setDonations] = useState<MockDonation[]>(FICTIONAL_DONATIONS);
-  const [deliveries, setDeliveries] = useState<MockDelivery[]>(FICTIONAL_DELIVERIES);
-  const [sharingRequests, setSharingRequests] = useState<MockSharingRequest[]>(
-    FICTIONAL_SHARING_REQUESTS
-  );
-  const [auditLogs, setAuditLogs] = useState<MockAuditLog[]>(FICTIONAL_AUDIT_LOGS);
-  const [consents, setConsents] = useState<MockConsentItem[]>(FICTIONAL_CONSENTS);
+  const [tenants, setTenants] = useState<MockTenant[]>([]);
+  const [cases, setCases] = useState<MockCase[]>([]);
+  const [donations, setDonations] = useState<MockDonation[]>([]);
+  const [deliveries, setDeliveries] = useState<MockDelivery[]>([]);
+  const [sharingRequests, setSharingRequests] = useState<MockSharingRequest[]>([]);
+  const [auditLogs, setAuditLogs] = useState<MockAuditLog[]>([]);
+  const [consents, setConsents] = useState<MockConsentItem[]>([]);
 
-  const [selectedAssnTenantId, setSelectedAssnTenantId] = useState<string>(
-    "33333333-3333-4333-8333-333333333301"
-  );
-  const [selectedIndTenantId, setSelectedIndTenantId] = useState<string>(
-    "33333333-3333-4333-8333-333333333302"
-  );
+  const [selectedAssnTenantId, setSelectedAssnTenantId] = useState<string>("");
+  const [selectedIndTenantId, setSelectedIndTenantId] = useState<string>("");
 
-  const [isDbModalOpen, setIsDbModalOpen] = useState(false);
+  const [loadingDb, setLoadingDb] = useState<boolean>(true);
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "warning" | "error";
   } | null>(null);
-  const [hydrated, setHydrated] = useState(false);
 
   const notify = (
     message: string,
@@ -82,77 +64,64 @@ export default function SanadWorkspacePreviewPage() {
     setToast({ message, type });
   };
 
-  const syncWithNeonDb = async (showNotification = false) => {
+  const fetchLiveDatabaseState = useCallback(async () => {
+    setLoadingDb(true);
     try {
       const res = await fetch("/api/state", { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
-      if (data?.ok && data.source === "neon_postgresql") {
-        if (Array.isArray(data.tenants) && data.tenants.length > 0) {
-          setTenants(data.tenants);
-        }
-        if (Array.isArray(data.cases) && data.cases.length > 0) {
-          setCases(data.cases);
-        }
-        if (Array.isArray(data.donations) && data.donations.length > 0) {
-          setDonations(data.donations);
-        }
-        if (Array.isArray(data.deliveries) && data.deliveries.length > 0) {
-          setDeliveries(data.deliveries);
-        }
-        if (Array.isArray(data.auditLogs) && data.auditLogs.length > 0) {
-          setAuditLogs(data.auditLogs);
-        }
-        if (showNotification) {
-          notify(
-            "تمت مزامنة كافة البيانات الحية من قاعدة بيانات Neon PostgreSQL بنجاح.",
-            "success"
-          );
-        }
+      if (data?.ok) {
+        if (Array.isArray(data.tenants)) setTenants(data.tenants);
+        if (Array.isArray(data.cases)) setCases(data.cases);
+        if (Array.isArray(data.donations)) setDonations(data.donations);
+        if (Array.isArray(data.deliveries)) setDeliveries(data.deliveries);
+        if (Array.isArray(data.sharingRequests))
+          setSharingRequests(data.sharingRequests);
+        if (Array.isArray(data.consents)) setConsents(data.consents);
+        if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       }
     } catch {
-      // Keep current state if offline
+      // Network error
+    } finally {
+      setLoadingDb(false);
     }
-  };
+  }, []);
 
-  const persistActionToNeon = (
+  const executeLiveAction = async (
     action: string,
-    payload: Record<string, unknown>
-  ) => {
-    void fetch("/api/state", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, payload }),
-    }).catch(() => {});
-  };
-
-  const appendAudit = (
-    params: {
+    payload: Record<string, unknown>,
+    audit: {
       actorNameAr: string;
       actorRoleAr: string;
       actionCode: string;
       descriptionAr: string;
       tenantNameAr: string;
-    },
-    extraAction?: { action: string; payload: Record<string, unknown> }
+    }
   ) => {
-    const newEntry: MockAuditLog = {
-      id: `audit-${Date.now()}`,
-      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
-      ...params,
-    };
-    setAuditLogs((prev) => [newEntry, ...prev]);
-    persistActionToNeon(extraAction?.action || "AUDIT_LOG", {
-      ...(extraAction?.payload || {}),
-      audit: params,
-    });
+    try {
+      await fetch("/api/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          payload: {
+            ...payload,
+            audit,
+          },
+        }),
+      });
+      await fetchLiveDatabaseState();
+    } catch {
+      // Ignore network error
+    }
   };
 
-  // Load persisted state, purge legacy demo keys, & sync live from Neon DB on mount
+  // Purge any old cached browser keys and load live data from Neon PostgreSQL on mount
   useEffect(() => {
     try {
       window.localStorage.removeItem("sanad_interactive_state_v1");
       window.localStorage.removeItem("sanad_interactive_state_v2");
+      window.localStorage.removeItem("sanad_live_state_v3");
 
       const params = new URLSearchParams(window.location.search);
       const viewParam = params.get("view") as ActiveRoleView | null;
@@ -170,65 +139,11 @@ export default function SanadWorkspacePreviewPage() {
       ) {
         setActiveView(viewParam);
       }
-
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed.tenants)) setTenants(parsed.tenants);
-        if (Array.isArray(parsed.cases)) setCases(parsed.cases);
-        if (Array.isArray(parsed.donations)) setDonations(parsed.donations);
-        if (Array.isArray(parsed.deliveries)) setDeliveries(parsed.deliveries);
-        if (Array.isArray(parsed.sharingRequests))
-          setSharingRequests(parsed.sharingRequests);
-        if (Array.isArray(parsed.auditLogs)) setAuditLogs(parsed.auditLogs);
-        if (Array.isArray(parsed.consents)) setConsents(parsed.consents);
-      }
-    } catch {
-      // Ignore storage read errors in restricted environments
-    } finally {
-      setHydrated(true);
-      void syncWithNeonDb(false);
-    }
-  }, []);
-
-  // Save state to localStorage when updated
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      window.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          tenants,
-          cases,
-          donations,
-          deliveries,
-          sharingRequests,
-          auditLogs,
-          consents,
-        })
-      );
-    } catch {
-      // Ignore storage write errors
-    }
-  }, [
-    hydrated,
-    tenants,
-    cases,
-    donations,
-    deliveries,
-    sharingRequests,
-    auditLogs,
-    consents,
-  ]);
-
-  const handleSyncDatabase = () => {
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
     } catch {
       // Ignore
     }
-    void syncWithNeonDb(true);
-  };
+    void fetchLiveDatabaseState();
+  }, [fetchLiveDatabaseState]);
 
   // Super Admin Handlers
   const handleUpdateTenantStatus = (tenantId: string, status: TenantStatus) => {
@@ -237,9 +152,11 @@ export default function SanadWorkspacePreviewPage() {
     setTenants((prev) =>
       prev.map((t) => (t.id === tenantId ? { ...t, status } : t))
     );
-    appendAudit(
+    void executeLiveAction(
+      "UPDATE_TENANT_STATUS",
+      { tenantId, status },
       {
-        actorNameAr: "مدير المنصة المركزي",
+        actorNameAr: "م. محمود هاشم (eng.mhashim@gmail.com)",
         actorRoleAr: "SUPER_ADMIN",
         actionCode: status === "ACTIVE" ? "TENANT_APPROVED" : "TENANT_SUSPENDED",
         descriptionAr:
@@ -247,16 +164,12 @@ export default function SanadWorkspacePreviewPage() {
             ? `اعتماد وتفعيل الجهة (${target.nameAr}) للعمل على المنصة`
             : `إيقاف مؤقت للجهة (${target.nameAr}) للمراجعة الرقابية`,
         tenantNameAr: target.nameAr,
-      },
-      {
-        action: "UPDATE_TENANT_STATUS",
-        payload: { tenantId, status },
       }
     );
     notify(
       status === "ACTIVE"
-        ? `تم اعتماد وتفعيل "${target.nameAr}" بنجاح.`
-        : `تم إيقاف "${target.nameAr}" مؤقتاً.`,
+        ? `تم اعتماد وتفعيل "${target.nameAr}" في قاعدة البيانات بنجاح.`
+        : `تم إيقاف "${target.nameAr}" مؤقتاً في قاعدة البيانات.`,
       status === "ACTIVE" ? "success" : "warning"
     );
   };
@@ -267,34 +180,21 @@ export default function SanadWorkspacePreviewPage() {
     governorate: string;
     registrationNumber?: string;
   }) => {
-    const newTenant: MockTenant = {
-      id: `tenant-${Date.now()}`,
-      type: payload.type,
-      nameAr: payload.nameAr,
-      governorate: payload.governorate,
-      registrationNumber: payload.registrationNumber,
-      status: "PENDING_APPROVAL",
-      beneficiariesCount: 0,
-      activeCasesCount: 0,
-      confirmedDonationsEgp: 0,
-      reservedAllocationsEgp: 0,
-      availableBalanceEgp: 0,
-    };
-    setTenants((prev) => [newTenant, ...prev]);
-    appendAudit(
+    void executeLiveAction(
+      "CREATE_TENANT",
+      payload,
       {
-        actorNameAr: "مدير المنصة المركزي",
+        actorNameAr: "م. محمود هاشم (eng.mhashim@gmail.com)",
         actorRoleAr: "SUPER_ADMIN",
         actionCode: "TENANT_REGISTERED",
         descriptionAr: `إدراج كيان جديد (${payload.nameAr}) بانتظار الاعتماد`,
         tenantNameAr: payload.nameAr,
-      },
-      {
-        action: "CREATE_TENANT",
-        payload,
       }
     );
-    notify(`تم إدراج "${payload.nameAr}" وحفظه في قاعدة بيانات Neon PostgreSQL.`, "success");
+    notify(
+      `تم إدراج "${payload.nameAr}" وحفظه مباشرة في قاعدة بيانات Neon PostgreSQL.`,
+      "success"
+    );
   };
 
   const handleDecideSharingRequest = (
@@ -306,19 +206,25 @@ export default function SanadWorkspacePreviewPage() {
     setSharingRequests((prev) =>
       prev.map((r) => (r.id === requestId ? { ...r, status: decision } : r))
     );
-    appendAudit({
-      actorNameAr: "مدير المنصة المركزي",
-      actorRoleAr: "SUPER_ADMIN",
-      actionCode:
-        decision === "APPROVED" ? "DATA_SHARING_GRANTED" : "DATA_SHARING_DENIED",
-      descriptionAr: `${
-        decision === "APPROVED" ? "الموافقة على" : "رفض"
-      } طلب مشاركة ملف المستفيد (${req.beneficiaryNameAr}) لصالح (${req.requestingTenantNameAr})`,
-      tenantNameAr: req.owningTenantNameAr,
-    });
+    void executeLiveAction(
+      "DECIDE_SHARING_REQUEST",
+      { requestId, decision },
+      {
+        actorNameAr: "م. محمود هاشم (eng.mhashim@gmail.com)",
+        actorRoleAr: "SUPER_ADMIN",
+        actionCode:
+          decision === "APPROVED" ? "DATA_SHARING_GRANTED" : "DATA_SHARING_DENIED",
+        descriptionAr: `${
+          decision === "APPROVED" ? "الموافقة على" : "رفض"
+        } طلب مشاركة ملف المستفيد (${req.beneficiaryNameAr}) لصالح (${
+          req.requestingTenantNameAr
+        })`,
+        tenantNameAr: req.owningTenantNameAr,
+      }
+    );
     notify(
       decision === "APPROVED"
-        ? "تمت الموافقة على مشاركة البيانات المحددة بين الجهتين."
+        ? "تمت الموافقة على مشاركة البيانات المحددة وتحديث قاعدة البيانات."
         : "تم رفض طلب مشاركة البيانات حفاظاً على الخصوصية.",
       decision === "APPROVED" ? "success" : "warning"
     );
@@ -336,69 +242,26 @@ export default function SanadWorkspacePreviewPage() {
     requestedEgp: number;
   }) => {
     const tenant = tenants.find((t) => t.id === payload.tenantId) || tenants[0];
-    const prefix = tenant.type === "INDIVIDUAL" ? "IND" : "CASE";
-    const newCase: MockCase = {
-      id: `case-${Date.now()}`,
-      tenantId: tenant.id,
-      caseNumber: `${prefix}-2026-0${cases.length + 140}`,
-      beneficiaryNameAr: payload.beneficiaryNameAr,
-      nationalId: payload.nationalId,
-      maskedNationalId: maskEgyptianNationalId(payload.nationalId),
-      phoneE164: payload.phoneE164,
-      householdCode: `HH-${payload.governorate.slice(0, 2)}-0${cases.length + 180}`,
-      governorate: payload.governorate,
-      targetType: payload.targetType,
-      category: payload.category,
-      categoryAr: AID_CATEGORIES_LABELS[payload.category],
-      caseStatus: "NEW",
-      researchStatus: "NOT_ASSIGNED",
-      eligibilityDecision: "PENDING",
-      allocationStatus: "UNALLOCATED",
-      deliveryStatus: "PENDING",
-      requestedEgp: payload.requestedEgp,
-      approvedEgp: 0,
-      assignedVolunteerAr: "غير مسند بعد",
-      assignedVolunteerId: "",
-      supervisorAr:
-        tenant.type === "INDIVIDUAL" ? "أ. طارق المنشاوي" : "د. منى الشاذلي",
-      householdIncomeEgp: 2500,
-      householdExpensesEgp: 2500 + payload.requestedEgp,
-      researchNotesAr: "ملف جديد مسجل بالرقم القومي وبانتظار إسناد الزيارة الميدانية.",
-      reportVersion: 0,
-    };
+    const prefix = tenant?.type === "INDIVIDUAL" ? "IND" : "CASE";
+    const caseNumber = `${prefix}-2026-${Date.now().toString().slice(-4)}`;
 
-    setCases((prev) => [newCase, ...prev]);
-    setTenants((prev) =>
-      prev.map((t) =>
-        t.id === tenant.id
-          ? {
-              ...t,
-              beneficiariesCount: t.beneficiariesCount + 1,
-              activeCasesCount: t.activeCasesCount + 1,
-            }
-          : t
-      )
-    );
-    appendAudit(
+    void executeLiveAction(
+      "CREATE_CASE",
+      { ...payload, caseNumber },
       {
         actorNameAr:
-          tenant.type === "INDIVIDUAL" ? "سارة عبد الرحمن المنصوري" : "أحمد محمود الشناوي",
+          tenant?.type === "INDIVIDUAL"
+            ? "سارة عبد الرحمن المنصوري"
+            : "أحمد محمود الشناوي",
         actorRoleAr:
-          tenant.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
+          tenant?.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
         actionCode: "CASE_CREATED_NID_VERIFIED",
-        descriptionAr: `تسجيل حالة جديدة (${newCase.caseNumber}) للمستفيد (${newCase.beneficiaryNameAr}) بعد فحص الرقم القومي`,
-        tenantNameAr: tenant.nameAr,
-      },
-      {
-        action: "CREATE_CASE",
-        payload: {
-          ...payload,
-          caseNumber: newCase.caseNumber,
-        },
+        descriptionAr: `تسجيل حالة جديدة (${caseNumber}) للمستفيد (${payload.beneficiaryNameAr}) بعد فحص الرقم القومي`,
+        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
       }
     );
     notify(
-      `تم تسجيل ملف الحالة (${newCase.caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL.`,
+      `تم تسجيل ملف الحالة (${caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL.`,
       "success"
     );
   };
@@ -412,67 +275,29 @@ export default function SanadWorkspacePreviewPage() {
     initialStatus: "CONFIRMED" | "PENDING_VERIFICATION";
   }) => {
     const tenant = tenants.find((t) => t.id === payload.tenantId) || tenants[0];
-    const isConfirmed = payload.initialStatus === "CONFIRMED";
-    const newDonation: MockDonation = {
-      id: `don-${Date.now()}`,
-      tenantId: tenant.id,
-      receiptNumber: `RCP-2026-${9010 + donations.length}`,
-      donorNameAr: payload.donorNameAr,
-      donationType: payload.donationType,
-      status: payload.initialStatus,
-      restrictedCategory: payload.restrictedCategory,
-      restrictedCategoryAr:
-        payload.restrictedCategory === "UNRESTRICTED"
-          ? "غير مقيد (متاح لكافة مصارف الخير المعتمدة)"
-          : `مقيد: ${AID_CATEGORIES_LABELS[payload.restrictedCategory]}`,
-      totalAmountEgp: payload.totalAmountEgp,
-      reservedAmountEgp: 0,
-      deliveredAmountEgp: 0,
-      availableAmountEgp: isConfirmed ? payload.totalAmountEgp : 0,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
+    const receiptNumber = `RCP-2026-${Date.now().toString().slice(-4)}`;
 
-    setDonations((prev) => [newDonation, ...prev]);
-    if (isConfirmed) {
-      setTenants((prev) =>
-        prev.map((t) =>
-          t.id === tenant.id
-            ? {
-                ...t,
-                confirmedDonationsEgp:
-                  t.confirmedDonationsEgp + payload.totalAmountEgp,
-                availableBalanceEgp:
-                  t.availableBalanceEgp + payload.totalAmountEgp,
-              }
-            : t
-        )
-      );
-    }
-
-    appendAudit(
+    void executeLiveAction(
+      "CREATE_DONATION",
+      { ...payload, receiptNumber },
       {
         actorNameAr:
-          tenant.type === "INDIVIDUAL" ? "سارة عبد الرحمن المنصوري" : "أحمد محمود الشناوي",
+          tenant?.type === "INDIVIDUAL"
+            ? "سارة عبد الرحمن المنصوري"
+            : "أحمد محمود الشناوي",
         actorRoleAr:
-          tenant.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
+          tenant?.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
         actionCode: "DONATION_RECORDED",
-        descriptionAr: `إصدار إيصال تبرع (${newDonation.receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
+        descriptionAr: `إصدار إيصال تبرع (${receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
           "ar-EG"
-        )} ج.م — الحالة: ${newDonation.status}`,
-        tenantNameAr: tenant.nameAr,
-      },
-      {
-        action: "CREATE_DONATION",
-        payload: {
-          ...payload,
-          receiptNumber: newDonation.receiptNumber,
-        },
+        )} ج.م — الحالة: ${payload.initialStatus}`,
+        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
       }
     );
     notify(
-      `تم تسجيل التبرع (${newDonation.receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
+      `تم تسجيل التبرع (${receiptNumber}) بقيمة ${payload.totalAmountEgp.toLocaleString(
         "ar-EG"
-      )} ج.م وحفظه في قاعدة البيانات.`,
+      )} ج.م في قاعدة البيانات.`,
       "success"
     );
   };
@@ -480,44 +305,23 @@ export default function SanadWorkspacePreviewPage() {
   const handleConfirmDonation = (donationId: string) => {
     const targetDon = donations.find((d) => d.id === donationId);
     if (!targetDon || targetDon.status !== "PENDING_VERIFICATION") return;
-
     const tenant = tenants.find((t) => t.id === targetDon.tenantId) || tenants[0];
-    setDonations((prev) =>
-      prev.map((d) =>
-        d.id === donationId
-          ? {
-              ...d,
-              status: "CONFIRMED",
-              availableAmountEgp: d.totalAmountEgp,
-            }
-          : d
-      )
-    );
-    setTenants((prev) =>
-      prev.map((t) =>
-        t.id === targetDon.tenantId
-          ? {
-              ...t,
-              confirmedDonationsEgp:
-                t.confirmedDonationsEgp + targetDon.totalAmountEgp,
-              availableBalanceEgp:
-                t.availableBalanceEgp + targetDon.totalAmountEgp,
-            }
-          : t
-      )
-    );
 
-    appendAudit({
-      actorNameAr: "أ. عمرو عبد العزيز",
-      actorRoleAr: "مدير جمعية خيرية",
-      actionCode: "DONATION_CONFIRMED",
-      descriptionAr: `تأكيد استلام التبرع (${targetDon.receiptNumber}) وإضافة ${targetDon.totalAmountEgp.toLocaleString(
-        "ar-EG"
-      )} ج.م للرصيد المتاح للتخصيص`,
-      tenantNameAr: tenant.nameAr,
-    });
+    void executeLiveAction(
+      "CONFIRM_DONATION",
+      { donationId },
+      {
+        actorNameAr: "أحمد محمود الشناوي",
+        actorRoleAr: "مدير جمعية خيرية",
+        actionCode: "DONATION_CONFIRMED",
+        descriptionAr: `تأكيد استلام التبرع (${targetDon.receiptNumber}) وإضافة ${targetDon.totalAmountEgp.toLocaleString(
+          "ar-EG"
+        )} ج.م للرصيد المتاح للتخصيص`,
+        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
+      }
+    );
     notify(
-      `تم تأكيد استلام التبرع (${targetDon.receiptNumber}) وإضافة المبلغ للرصيد المتاح!`,
+      `تم تأكيد استلام التبرع (${targetDon.receiptNumber}) وإضافة المبلغ للرصيد المتاح في قاعدة البيانات!`,
       "success"
     );
   };
@@ -544,89 +348,30 @@ export default function SanadWorkspacePreviewPage() {
 
     const tenant = tenants.find((t) => t.id === donation.tenantId) || tenants[0];
 
-    // 1. Deduct from donation available balance & add to reserved
-    setDonations((prev) =>
-      prev.map((d) => {
-        if (d.id !== donation.id) return d;
-        const newAvail = d.availableAmountEgp - payload.amountEgp;
-        const newReserved = d.reservedAmountEgp + payload.amountEgp;
-        return {
-          ...d,
-          availableAmountEgp: newAvail,
-          reservedAmountEgp: newReserved,
-          status: newAvail === 0 ? "FULLY_ALLOCATED" : "PARTIALLY_ALLOCATED",
-        };
-      })
+    void executeLiveAction(
+      "ALLOCATE_ATOMIC",
+      payload,
+      {
+        actorNameAr:
+          tenant?.type === "INDIVIDUAL"
+            ? "سارة عبد الرحمن المنصوري"
+            : "أحمد محمود الشناوي",
+        actorRoleAr:
+          tenant?.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
+        actionCode: "ALLOCATION_RESERVED_ATOMIC",
+        descriptionAr: `تخصيص ذري لمبلغ ${payload.amountEgp.toLocaleString(
+          "ar-EG"
+        )} ج.م من الإيصال ${donation.receiptNumber} للحالة ${
+          targetCase.caseNumber
+        } وجدولة التسليم`,
+        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
+      }
     );
-
-    // 2. Update tenant summary balances
-    setTenants((prev) =>
-      prev.map((t) =>
-        t.id === tenant.id
-          ? {
-              ...t,
-              reservedAllocationsEgp:
-                t.reservedAllocationsEgp + payload.amountEgp,
-              availableBalanceEgp: Math.max(
-                0,
-                t.availableBalanceEgp - payload.amountEgp
-              ),
-            }
-          : t
-      )
-    );
-
-    // 3. Update case allocation & delivery status
-    setCases((prev) =>
-      prev.map((c) =>
-        c.id === targetCase.id
-          ? {
-              ...c,
-              approvedEgp: payload.amountEgp,
-              allocationStatus: "RESERVED",
-              deliveryStatus: "SCHEDULED",
-            }
-          : c
-      )
-    );
-
-    // 4. Create scheduled AidDelivery task
-    const newDelivery: MockDelivery = {
-      id: `deliv-${Date.now()}`,
-      tenantId: tenant.id,
-      caseId: targetCase.id,
-      caseNumber: targetCase.caseNumber,
-      beneficiaryNameAr: targetCase.beneficiaryNameAr,
-      descriptionAr: `صرف مخصص (${targetCase.categoryAr}) من الإيصال ${donation.receiptNumber}`,
-      amountEgp: payload.amountEgp,
-      status: "SCHEDULED",
-      assignedVolunteerAr:
-        targetCase.assignedVolunteerAr !== "غير مسند بعد"
-          ? targetCase.assignedVolunteerAr
-          : "أحمد سامي الكيلاني",
-      idempotencyKey: `IDEMP-ALLOC-${Date.now().toString(36).toUpperCase()}`,
-      scheduledAt: new Date().toISOString().slice(0, 10),
-    };
-    setDeliveries((prev) => [newDelivery, ...prev]);
-
-    appendAudit({
-      actorNameAr:
-        tenant.type === "INDIVIDUAL" ? "أ. طارق المنشاوي" : "أ. عمرو عبد العزيز",
-      actorRoleAr:
-        tenant.type === "INDIVIDUAL" ? "مبادر فردي مستقل" : "مدير جمعية خيرية",
-      actionCode: "ALLOCATION_RESERVED_ATOMIC",
-      descriptionAr: `تخصيص ذري لمبلغ ${payload.amountEgp.toLocaleString(
-        "ar-EG"
-      )} ج.م من الإيصال ${donation.receiptNumber} للحالة ${
-        targetCase.caseNumber
-      } وجدولة التسليم`,
-      tenantNameAr: tenant.nameAr,
-    });
 
     notify(
       `تم الحجز المالي الذري بمبلغ ${payload.amountEgp.toLocaleString(
         "ar-EG"
-      )} ج.م للحالة (${targetCase.caseNumber}) وجدولة مهمة التسليم للمتطوع!`,
+      )} ج.م للحالة (${targetCase.caseNumber}) في قاعدة البيانات!`,
       "success"
     );
   };
@@ -639,29 +384,18 @@ export default function SanadWorkspacePreviewPage() {
   ) => {
     const target = cases.find((c) => c.id === caseId);
     if (!target) return;
-    setCases((prev) =>
-      prev.map((c) =>
-        c.id === caseId
-          ? {
-              ...c,
-              assignedVolunteerId: volunteerId,
-              assignedVolunteerAr: volunteerNameAr,
-              researchStatus:
-                c.researchStatus === "NOT_ASSIGNED"
-                  ? "ASSIGNED"
-                  : c.researchStatus,
-              caseStatus: c.caseStatus === "NEW" ? "UNDER_RESEARCH" : c.caseStatus,
-            }
-          : c
-      )
+
+    void executeLiveAction(
+      "ASSIGN_VOLUNTEER",
+      { caseId, volunteerId, volunteerNameAr },
+      {
+        actorNameAr: "د. منى الشاذلي",
+        actorRoleAr: "مشرف البحث الاجتماعي",
+        actionCode: "RESEARCH_ASSIGNED",
+        descriptionAr: `إسناد الزيارة الميدانية للحالة (${target.caseNumber}) إلى الباحث (${volunteerNameAr})`,
+        tenantNameAr: "إدارة البحث الاجتماعي",
+      }
     );
-    appendAudit({
-      actorNameAr: "د. منى الشاذلي",
-      actorRoleAr: "مشرف البحث الاجتماعي",
-      actionCode: "RESEARCH_ASSIGNED",
-      descriptionAr: `إسناد الزيارة الميدانية للحالة (${target.caseNumber}) إلى الباحث (${volunteerNameAr})`,
-      tenantNameAr: "إدارة البحث الاجتماعي",
-    });
     notify(
       `تم إسناد الزيارة الميدانية للحالة (${target.caseNumber}) إلى الباحث ${volunteerNameAr}.`,
       "success"
@@ -685,29 +419,34 @@ export default function SanadWorkspacePreviewPage() {
     });
 
     if (!sodCheck.allowed) {
-      appendAudit({
-        actorNameAr: target.assignedVolunteerAr,
-        actorRoleAr: "محاولة اعتماد ذاتي",
-        actionCode: sodCheck.ruleCode,
-        descriptionAr: sodCheck.reasonAr,
-        tenantNameAr: "محرك فصل المهام الرقابية (SoD Guard)",
-      });
+      void executeLiveAction(
+        "SOD_VIOLATION_BLOCKED",
+        { caseId },
+        {
+          actorNameAr: target.assignedVolunteerAr,
+          actorRoleAr: "محاولة اعتماد ذاتي",
+          actionCode: sodCheck.ruleCode,
+          descriptionAr: sodCheck.reasonAr,
+          tenantNameAr: "محرك فصل المهام الرقابية (SoD Guard)",
+        }
+      );
       notify(sodCheck.reasonAr, "error");
       return;
     }
 
+    void executeLiveAction(
+      "REVIEW_DECISION",
+      { caseId, decision },
+      {
+        actorNameAr: "د. منى الشاذلي",
+        actorRoleAr: "مشرف البحث الاجتماعي",
+        actionCode: `ELIGIBILITY_${decision}`,
+        descriptionAr: `إصدار قرار الأهلية (${decision}) للحالة (${target.caseNumber}) بعد التحقق من فصل المهام`,
+        tenantNameAr: "إدارة البحث الاجتماعي",
+      }
+    );
+
     if (decision === "NEEDS_REVISION") {
-      setCases((prev) =>
-        prev.map((c) =>
-          c.id === caseId
-            ? {
-                ...c,
-                researchStatus: "NEEDS_REVISION",
-                caseStatus: "UNDER_RESEARCH",
-              }
-            : c
-        )
-      );
       notify(
         `تمت إعادة تقرير الحالة (${target.caseNumber}) للباحث الميداني لاستكمال البيانات.`,
         "warning"
@@ -715,30 +454,8 @@ export default function SanadWorkspacePreviewPage() {
       return;
     }
 
-    setCases((prev) =>
-      prev.map((c) =>
-        c.id === caseId
-          ? {
-              ...c,
-              researchStatus: "REVIEWED",
-              eligibilityDecision: decision,
-              caseStatus: decision === "INELIGIBLE" ? "REJECTED" : "APPROVED",
-              approvedEgp:
-                decision === "INELIGIBLE" ? 0 : c.requestedEgp,
-            }
-          : c
-      )
-    );
-
-    appendAudit({
-      actorNameAr: "د. منى الشاذلي",
-      actorRoleAr: "مشرف البحث الاجتماعي",
-      actionCode: `ELIGIBILITY_${decision}`,
-      descriptionAr: `إصدار قرار الأهلية (${decision}) للحالة (${target.caseNumber}) بعد التحقق من فصل المهام`,
-      tenantNameAr: "إدارة البحث الاجتماعي",
-    });
     notify(
-      `تم اعتماد قرار الأهلية (${decision}) للحالة (${target.caseNumber}) بنجاح.`,
+      `تم اعتماد قرار الأهلية (${decision}) للحالة (${target.caseNumber}) في قاعدة البيانات.`,
       decision === "INELIGIBLE" ? "warning" : "success"
     );
   };
@@ -754,31 +471,19 @@ export default function SanadWorkspacePreviewPage() {
     if (!target) return;
     const nextVersion = target.reportVersion + 1;
 
-    setCases((prev) =>
-      prev.map((c) =>
-        c.id === payload.caseId
-          ? {
-              ...c,
-              householdIncomeEgp: payload.incomeEgp,
-              householdExpensesEgp: payload.expensesEgp,
-              researchNotesAr: payload.notesAr,
-              reportVersion: nextVersion,
-              researchStatus: "SUBMITTED",
-              caseStatus: "RESEARCH_SUBMITTED",
-            }
-          : c
-      )
+    void executeLiveAction(
+      "SUBMIT_FIELD_REPORT",
+      payload,
+      {
+        actorNameAr: target.assignedVolunteerAr || "أحمد سامي الكيلاني",
+        actorRoleAr: "باحث / متطوع ميداني",
+        actionCode: "FIELD_REPORT_SUBMITTED",
+        descriptionAr: `رفع تقرير البحث الميداني (الإصدار v${nextVersion}) للحالة (${target.caseNumber}) للمراجعة`,
+        tenantNameAr: "وحدة العمل الميداني",
+      }
     );
-
-    appendAudit({
-      actorNameAr: target.assignedVolunteerAr || "أحمد سامي الكيلاني",
-      actorRoleAr: "باحث / متطوع ميداني",
-      actionCode: "FIELD_REPORT_SUBMITTED",
-      descriptionAr: `رفع تقرير البحث الميداني (الإصدار v${nextVersion}) للحالة (${target.caseNumber}) للمراجعة`,
-      tenantNameAr: "وحدة العمل الميداني",
-    });
     notify(
-      `تم إرسال تقرير البحث الميداني (الإصدار v${nextVersion}) للحالة (${target.caseNumber}) إلى مشرف البحث الاجتماعي.`,
+      `تم إرسال تقرير البحث الميداني (الإصدار v${nextVersion}) للحالة (${target.caseNumber}) وحفظه في قاعدة البيانات.`,
       "success"
     );
   };
@@ -787,36 +492,19 @@ export default function SanadWorkspacePreviewPage() {
     const targetDeliv = deliveries.find((d) => d.id === deliveryId);
     if (!targetDeliv || targetDeliv.status === "CONFIRMED") return;
 
-    const nowStamp = new Date().toISOString().replace("T", " ").slice(0, 16);
-    setDeliveries((prev) =>
-      prev.map((d) =>
-        d.id === deliveryId
-          ? { ...d, status: "CONFIRMED", confirmedAt: nowStamp }
-          : d
-      )
+    void executeLiveAction(
+      "CONFIRM_DELIVERY",
+      { deliveryId },
+      {
+        actorNameAr: targetDeliv.assignedVolunteerAr,
+        actorRoleAr: "باحث / متطوع ميداني",
+        actionCode: "DELIVERY_CONFIRMED_IDEMPOTENT",
+        descriptionAr: `تأكيد التسليم الفعلي للحالة (${targetDeliv.caseNumber}) بمفتاح عدم تكرار (${targetDeliv.idempotencyKey})`,
+        tenantNameAr: "وحدة تسليم المساعدات",
+      }
     );
-    setCases((prev) =>
-      prev.map((c) =>
-        c.id === targetDeliv.caseId
-          ? {
-              ...c,
-              deliveryStatus: "CONFIRMED",
-              allocationStatus: "DISBURSED",
-              caseStatus: "COMPLETED",
-            }
-          : c
-      )
-    );
-
-    appendAudit({
-      actorNameAr: targetDeliv.assignedVolunteerAr,
-      actorRoleAr: "باحث / متطوع ميداني",
-      actionCode: "DELIVERY_CONFIRMED_IDEMPOTENT",
-      descriptionAr: `تأكيد التسليم الفعلي للحالة (${targetDeliv.caseNumber}) بمفتاح عدم تكرار (${targetDeliv.idempotencyKey})`,
-      tenantNameAr: "وحدة تسليم المساعدات",
-    });
     notify(
-      `تم تأكيد وتوثيق التسليم الفعلي للحالة (${targetDeliv.caseNumber}) بمفتاح (${targetDeliv.idempotencyKey}).`,
+      `تم تأكيد وتوثيق التسليم الفعلي للحالة (${targetDeliv.caseNumber}) في قاعدة البيانات.`,
       "success"
     );
   };
@@ -828,13 +516,17 @@ export default function SanadWorkspacePreviewPage() {
       authorUserId: "user-vol-sara",
     });
     notify(check.reasonAr, "error");
-    appendAudit({
-      actorNameAr: "أحمد سامي الكيلاني",
-      actorRoleAr: "باحث / متطوع ميداني",
-      actionCode: check.ruleCode,
-      descriptionAr: check.reasonAr,
-      tenantNameAr: "محرك فصل المهام الرقابية (SoD Guard)",
-    });
+    void executeLiveAction(
+      "SOD_VOLUNTEER_BLOCKED",
+      {},
+      {
+        actorNameAr: "أحمد سامي الكيلاني",
+        actorRoleAr: "باحث / متطوع ميداني",
+        actionCode: check.ruleCode,
+        descriptionAr: check.reasonAr,
+        tenantNameAr: "محرك فصل المهام الرقابية (SoD Guard)",
+      }
+    );
   };
 
   // Beneficiary Portal Handlers
@@ -845,45 +537,30 @@ export default function SanadWorkspacePreviewPage() {
     notesAr: string;
   }) => {
     const tenant = tenants.find((t) => t.id === payload.tenantId) || tenants[0];
-    const newCase: MockCase = {
-      id: `case-ben-${Date.now()}`,
-      tenantId: tenant.id,
-      caseNumber: `REQ-2026-0${cases.length + 310}`,
-      beneficiaryNameAr: "فاطمة عبد الرحمن السيد (طلب بوابة المستفيد)",
-      nationalId: "28406121601248",
-      maskedNationalId: "284061216****8",
-      phoneE164: "+201012345678",
-      householdCode: "HH-GH-0089",
-      governorate: tenant.governorate,
-      targetType: "HOUSEHOLD",
-      category: payload.category,
-      categoryAr: AID_CATEGORIES_LABELS[payload.category],
-      caseStatus: "NEW",
-      researchStatus: "NOT_ASSIGNED",
-      eligibilityDecision: "PENDING",
-      allocationStatus: "UNALLOCATED",
-      deliveryStatus: "PENDING",
-      requestedEgp: payload.requestedEgp,
-      approvedEgp: 0,
-      assignedVolunteerAr: "بانتظار التكليف",
-      assignedVolunteerId: "",
-      supervisorAr: "د. منى الشاذلي",
-      householdIncomeEgp: 2400,
-      householdExpensesEgp: 5900,
-      researchNotesAr: payload.notesAr,
-      reportVersion: 0,
-    };
+    const caseNumber = `REQ-2026-${Date.now().toString().slice(-4)}`;
 
-    setCases((prev) => [newCase, ...prev]);
-    appendAudit({
-      actorNameAr: "فاطمة عبد الرحمن السيد",
-      actorRoleAr: "مستفيد (BENEFICIARY)",
-      actionCode: "SELF_SERVICE_REQUEST_CREATED",
-      descriptionAr: `تقديم طلب مساعدة ذاتي (${newCase.caseNumber}) لدى (${tenant.nameAr})`,
-      tenantNameAr: tenant.nameAr,
-    });
+    void executeLiveAction(
+      "SUBMIT_BENEFICIARY_REQUEST",
+      {
+        ...payload,
+        caseNumber,
+        beneficiaryNameAr: "فاطمة عبد الفتاح السيد",
+        nationalId: "27905151601234",
+        phoneE164: "+201233344455",
+        governorate: tenant?.governorate || "الغربية",
+      },
+      {
+        actorNameAr: "فاطمة عبد الفتاح السيد",
+        actorRoleAr: "مستفيد (BENEFICIARY)",
+        actionCode: "SELF_SERVICE_REQUEST_CREATED",
+        descriptionAr: `تقديم طلب مساعدة ذاتي (${caseNumber}) لدى (${
+          tenant?.nameAr || "الجهة الخيرية"
+        })`,
+        tenantNameAr: tenant?.nameAr || "الجهة الخيرية",
+      }
+    );
     notify(
-      `تم إرسال طلب المساعدة (${newCase.caseNumber}) إلى "${tenant.nameAr}" بنجاح! يمكنك متابعته في المسار الخماسي.`,
+      `تم إرسال طلب المساعدة (${caseNumber}) وحفظه في قاعدة بيانات Neon PostgreSQL بنجاح!`,
       "success"
     );
   };
@@ -892,22 +569,20 @@ export default function SanadWorkspacePreviewPage() {
     const target = consents.find((c) => c.id === consentId);
     if (!target) return;
     const nextState = !target.granted;
-    const today = new Date().toISOString().slice(0, 10);
 
-    setConsents((prev) =>
-      prev.map((c) =>
-        c.id === consentId ? { ...c, granted: nextState, updatedAt: today } : c
-      )
+    void executeLiveAction(
+      "TOGGLE_CONSENT",
+      { consentId },
+      {
+        actorNameAr: "فاطمة عبد الفتاح السيد",
+        actorRoleAr: "مستفيد (BENEFICIARY)",
+        actionCode: nextState ? "CONSENT_GRANTED" : "CONSENT_REVOKED",
+        descriptionAr: `${nextState ? "منح" : "إلغاء"} موافقة الخصوصية (${
+          target.scopeCode
+        })`,
+        tenantNameAr: "بوابة المستفيد الذاتية",
+      }
     );
-    appendAudit({
-      actorNameAr: "فاطمة عبد الرحمن السيد",
-      actorRoleAr: "مستفيد (BENEFICIARY)",
-      actionCode: nextState ? "CONSENT_GRANTED" : "CONSENT_REVOKED",
-      descriptionAr: `${nextState ? "منح" : "إلغاء"} موافقة الخصوصية (${
-        target.scopeCode
-      })`,
-      tenantNameAr: "بوابة المستفيد الذاتية",
-    });
     notify(
       nextState
         ? `تم تفعيل الموافقة على: "${target.titleAr}"`
@@ -920,48 +595,33 @@ export default function SanadWorkspacePreviewPage() {
   const associationTenants = tenants.filter((t) => t.type === "ASSOCIATION");
   const individualTenants = tenants.filter((t) => t.type === "INDIVIDUAL");
 
+  const emptyFallbackTenant: MockTenant = {
+    id: "",
+    type: "ASSOCIATION",
+    nameAr: "جاري تحميل بيانات الجهة من قاعدة البيانات...",
+    governorate: "مصر",
+    status: "ACTIVE",
+    beneficiariesCount: 0,
+    activeCasesCount: 0,
+    confirmedDonationsEgp: 0,
+    reservedAllocationsEgp: 0,
+    availableBalanceEgp: 0,
+  };
+
   const activeAssnTenant =
     associationTenants.find((t) => t.id === selectedAssnTenantId) ||
     associationTenants[0] ||
-    tenants[0];
+    tenants[0] ||
+    emptyFallbackTenant;
   const activeIndTenant =
     individualTenants.find((t) => t.id === selectedIndTenantId) ||
     individualTenants[0] ||
-    tenants[1];
+    tenants[0] ||
+    { ...emptyFallbackTenant, type: "INDIVIDUAL" };
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Top Architecture & Cloud Database Bar */}
-      <div className="bg-purple-950 text-purple-100 px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2 border-b border-purple-800">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
-          <strong>منصة سَنَد السحابية (SANAD v1.0):</strong> جميع الأدوار، النماذج، قواعد فصل المهام، والتخصيص المالي الذري تعمل تفاعلياً بالكامل مع حفظ فوري.
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsDbModalOpen(true)}
-            className="bg-purple-800 hover:bg-purple-700 text-white px-3 py-1 rounded-full font-semibold transition border border-purple-600"
-          >
-            قاعدة البيانات والربط السحابي (39 جدول PostgreSQL)
-          </button>
-          <Link
-            href="/login"
-            className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1 rounded-full font-semibold transition"
-          >
-            صفحة تسجيل الدخول الكاملة (/login) ↗
-          </Link>
-          <button
-            type="button"
-            onClick={handleSyncDatabase}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-full font-medium transition"
-          >
-            مزامنة البيانات الحية (Neon DB) ↻
-          </button>
-        </div>
-      </div>
-
-      {/* Role Switcher Header */}
+      {/* Main Navigation Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -976,7 +636,7 @@ export default function SanadWorkspacePreviewPage() {
             </div>
           </div>
 
-          <nav aria-label="تبديل الأدوار الوظيفية" className="flex flex-wrap gap-1.5">
+          <nav aria-label="تبديل الأدوار الوظيفية" className="flex flex-wrap items-center gap-1.5">
             {[
               { id: "SUPER_ADMIN", label: "مدير المنصة" },
               { id: "ASSOCIATION_ADMIN", label: "مدير جمعية خيرية" },
@@ -984,7 +644,7 @@ export default function SanadWorkspacePreviewPage() {
               { id: "RESEARCH_SUPERVISOR", label: "مشرف البحث الاجتماعي" },
               { id: "VOLUNTEER", label: "باحث / متطوع" },
               { id: "BENEFICIARY", label: "بوابة المستفيد" },
-              { id: "AUTH_LOGIN_REGISTER", label: "الدخول والتسجيل (الرقم القومي)" },
+              { id: "AUTH_LOGIN_REGISTER", label: "الدخول والتسجيل" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1029,7 +689,7 @@ export default function SanadWorkspacePreviewPage() {
         </div>
       )}
 
-      {/* Main Workspace Area */}
+      {/* Main Dynamic Workspace Area */}
       <main
         className={
           activeView === "AUTH_LOGIN_REGISTER"
@@ -1037,6 +697,12 @@ export default function SanadWorkspacePreviewPage() {
             : "max-w-7xl mx-auto px-4 py-6 space-y-6"
         }
       >
+        {loadingDb && activeView !== "AUTH_LOGIN_REGISTER" && tenants.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm font-bold text-slate-600 shadow-sm">
+            جاري تحميل البيانات الحية من قاعدة البيانات...
+          </div>
+        ) : null}
+
         {activeView === "SUPER_ADMIN" && (
           <SuperAdminWorkspace
             tenants={tenants}
@@ -1125,20 +791,9 @@ export default function SanadWorkspacePreviewPage() {
               mode: "LOGIN" | "REGISTER";
               correlationId: string;
             }) => {
-              appendAudit({
-                actorNameAr: payload.fullNameAr,
-                actorRoleAr: payload.targetRole,
-                actionCode:
-                  payload.mode === "REGISTER"
-                    ? "USER_REGISTERED_NID_OTP"
-                    : "USER_AUTHENTICATED_NID_OTP",
-                descriptionAr: `توثيق الحساب (${payload.email}) بالرقم القومي (${maskEgyptianNationalId(
-                  payload.nationalId
-                )}) والهاتف (${payload.phoneE164}) — معرّف: ${payload.correlationId}`,
-                tenantNameAr: `محافظة ${payload.governorateNameAr}`,
-              });
+              void fetchLiveDatabaseState();
               notify(
-                `مرحباً ${payload.fullNameAr}! تم التحقق من الرقم القومي والبريد الإلكتروني (${payload.email}) وتفعيل جلسة (${payload.targetRole}).`,
+                `مرحباً ${payload.fullNameAr}! تم توثيق الدخول (${payload.email}) وتفعيل جلسة (${payload.targetRole}).`,
                 "success"
               );
               setActiveView(payload.targetRole);
@@ -1146,13 +801,6 @@ export default function SanadWorkspacePreviewPage() {
           />
         )}
       </main>
-
-      {/* Database & Cloud Connection Modal */}
-      <DatabaseSetupModal
-        isOpen={isDbModalOpen}
-        onClose={() => setIsDbModalOpen(false)}
-        onNotify={notify}
-      />
     </div>
   );
 }
