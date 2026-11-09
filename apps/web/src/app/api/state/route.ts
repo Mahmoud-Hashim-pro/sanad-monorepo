@@ -17,7 +17,12 @@ import {
   type MockConsentItem,
   type TenantStatus,
 } from "../../../lib/mock-data/fictional-seed";
-import { maskEgyptianNationalId } from "../../../lib/domain/sanad-rules";
+import {
+  maskEgyptianNationalId,
+  resolveRoleLabelAr,
+  resolveRolePermissions,
+  validateFullName,
+} from "../../../lib/domain/sanad-rules";
 import {
   getServerSession,
   hasPermission,
@@ -33,7 +38,11 @@ const ACTION_REQUIRED_PERMISSIONS: Record<string, string> = {
   UPDATE_TENANT_STATUS: "platform:tenants:approve",
   CREATE_TENANT: "platform:tenants:approve",
   DECIDE_SHARING_REQUEST: "platform:tenants:approve",
-  ASSIGN_EMAIL_ROLE: "platform:tenants:approve",
+  ASSIGN_EMAIL_ROLE: "platform:users:manage",
+  ASSIGN_USER_ROLE_AND_PERMISSIONS: "platform:users:manage",
+  CREATE_CUSTOM_ROLE: "platform:users:manage",
+  UPDATE_ROLE_PERMISSIONS: "platform:users:manage",
+  CREATE_BENEFICIARY_USER: "tenant:beneficiaries:manage",
   CREATE_CASE: "tenant:cases:manage",
   CREATE_DONATION: "tenant:donations:manage",
   CONFIRM_DONATION: "tenant:donations:manage",
@@ -111,6 +120,8 @@ export async function GET() {
       dbSharingRequests,
       dbConsents,
       dbAuditLogs,
+      dbDynamicRoles,
+      dbUsers,
     ] = await Promise.all([
       prisma.tenant.findMany({
         include: {
@@ -149,6 +160,18 @@ export async function GET() {
         include: { actor: true },
         orderBy: { createdAt: "desc" },
         take: 50,
+      }),
+      prisma.dynamicRole.findMany({
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.user.findMany({
+        include: {
+          personIdentity: true,
+          phones: true,
+          ownedTenants: true,
+          memberships: { include: { tenant: true } },
+        },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -447,109 +470,48 @@ export async function GET() {
       ? deliveries.filter((d) => d.tenantId === session.tenantId)
       : deliveries;
 
-    // Build managedUsers directory (provisioned accounts + registered accounts + Super Admin role assignments)
-    const allRoleLogs = await prisma.auditLog.findMany({
-      where: {
-        actionCode: {
-          in: ["AUTH_REGISTER_VERIFIED", "ROLE_ASSIGNED_BY_SUPER_ADMIN"],
-        },
-      },
-      orderBy: { createdAt: "asc" },
-      take: 300,
+    // Direct DB-backed managedUsers directory
+    const managedUsers = dbUsers.map((u) => {
+      const isSuper =
+        u.id === "22222222-2222-4222-8222-222222222200" ||
+        u.email === "eng.mhashim@gmail.com";
+      const roleCode = isSuper ? "SUPER_ADMIN" : u.customRoleCode || "BENEFICIARY";
+      const roleNameAr = resolveRoleLabelAr(roleCode, dbDynamicRoles);
+      const resolvedPerms =
+        roleCode === "SUPER_ADMIN"
+          ? Array.from(
+              new Set([
+                ...ROLE_PERMISSIONS_MAP.SUPER_ADMIN,
+                ...(dbDynamicRoles.find((r) => r.code === "SUPER_ADMIN")?.permissions || []),
+              ])
+            )
+          : resolveRolePermissions(roleCode, u.customPermissions, dbDynamicRoles);
+
+      const tenantId =
+        u.ownedTenants[0]?.id || u.memberships[0]?.tenantId || null;
+      const tenantNameAr =
+        u.ownedTenants[0]?.nameAr ||
+        u.memberships[0]?.tenant?.nameAr ||
+        (isSuper ? "الإدارة المركزية لمنصة سَنَد" : "بوابة المستفيد");
+
+      return {
+        id: u.id,
+        email: u.email || `${u.fullNameAr.replace(/\s+/g, "").toLowerCase()}@sanad.eg`,
+        fullNameAr: u.fullNameAr,
+        maskedNationalId: u.personIdentity?.maskedNationalId || "290010101****1",
+        phoneE164: u.phones[0]?.phoneE164 || "+201000000000",
+        role: roleCode as AuthRoleCode,
+        roleNameAr,
+        tenantId,
+        tenantNameAr,
+        customPermissions: u.customPermissions || [],
+        permissions: resolvedPerms,
+        permissionsCount: resolvedPerms.length,
+        status: u.status,
+        hasPassword: Boolean(u.passwordHash),
+        updatedAt: u.updatedAt.toISOString().slice(0, 10),
+      };
     });
-
-    const userByEmailMap = new Map<
-      string,
-      {
-        email: string;
-        fullNameAr: string;
-        maskedNationalId: string;
-        phoneE164: string;
-        role: AuthRoleCode;
-        tenantId: string | null;
-        tenantNameAr: string;
-        permissionsCount: number;
-        permissions: string[];
-        status: string;
-        hasPassword: boolean;
-        updatedAt: string;
-      }
-    >();
-
-    // Seed initial core accounts (Only Super Admin - system boots pristine)
-    userByEmailMap.set("eng.mhashim@gmail.com", {
-      email: "eng.mhashim@gmail.com",
-      fullNameAr: "م. محمود هاشم (مدير المنصة المركزي)",
-      maskedNationalId: "295010101****4",
-      phoneE164: "+201000000001",
-      role: "SUPER_ADMIN",
-      tenantId: null,
-      tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
-      permissionsCount: ROLE_PERMISSIONS_MAP.SUPER_ADMIN.length,
-      permissions: ROLE_PERMISSIONS_MAP.SUPER_ADMIN,
-      status: "ACTIVE",
-      hasPassword: true,
-      updatedAt: "2026-11-08",
-    });
-
-    for (const log of allRoleLogs) {
-      const meta = (log.metadataJson || {}) as Record<string, unknown>;
-      if (log.actionCode === "AUTH_REGISTER_VERIFIED") {
-        const emailLower = String(meta.email || "").toLowerCase();
-        if (!emailLower) continue;
-        const existing = userByEmailMap.get(emailLower);
-        const role = (existing?.role ||
-          (meta.role as AuthRoleCode) ||
-          "BENEFICIARY") as AuthRoleCode;
-        userByEmailMap.set(emailLower, {
-          email: emailLower,
-          fullNameAr: String(meta.actorNameAr || meta.fullNameAr || existing?.fullNameAr || emailLower),
-          maskedNationalId: String(
-            meta.maskedNationalId || existing?.maskedNationalId || "290010101****1"
-          ),
-          phoneE164: String(meta.phoneE164 || existing?.phoneE164 || "+201000000000"),
-          role,
-          tenantId: (meta.tenantId as string) || existing?.tenantId || null,
-          tenantNameAr: String(
-            meta.tenantNameAr || existing?.tenantNameAr || "بوابة المستفيد"
-          ),
-          permissionsCount: (ROLE_PERMISSIONS_MAP[role] || []).length,
-          permissions: ROLE_PERMISSIONS_MAP[role] || [],
-          status: "ACTIVE",
-          hasPassword: true,
-          updatedAt: log.createdAt.toISOString().slice(0, 10),
-        });
-      } else if (log.actionCode === "ROLE_ASSIGNED_BY_SUPER_ADMIN") {
-        const targetEmail = String(meta.targetEmail || "").toLowerCase();
-        if (!targetEmail) continue;
-        const assignedRole = (meta.assignedRole as AuthRoleCode) || "BENEFICIARY";
-        const existing = userByEmailMap.get(targetEmail);
-        userByEmailMap.set(targetEmail, {
-          email: targetEmail,
-          fullNameAr: String(
-            meta.fullNameAr || existing?.fullNameAr || "مستخدم مسجل بالمنصة"
-          ),
-          maskedNationalId: String(
-            meta.maskedNationalId || existing?.maskedNationalId || "290010101****1"
-          ),
-          phoneE164: String(meta.phoneE164 || existing?.phoneE164 || "+201000000000"),
-          role: assignedRole,
-          tenantId: (meta.tenantId as string) || existing?.tenantId || null,
-          tenantNameAr: String(
-            meta.tenantNameAr ||
-              existing?.tenantNameAr ||
-              "وفقاً للدور المعتمد"
-          ),
-          permissionsCount: (ROLE_PERMISSIONS_MAP[assignedRole] || []).length,
-          permissions: ROLE_PERMISSIONS_MAP[assignedRole] || [],
-          status: "ACTIVE",
-          hasPassword: true,
-          updatedAt: log.createdAt.toISOString().slice(0, 10),
-        });
-      }
-    }
-
-    const managedUsers = Array.from(userByEmailMap.values());
 
     return NextResponse.json({
       ok: true,
@@ -563,6 +525,7 @@ export async function GET() {
       consents,
       auditLogs,
       managedUsers,
+      roles: dbDynamicRoles,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -697,7 +660,269 @@ export async function POST(request: Request) {
           },
         });
       }
-    } else if (action === "ASSIGN_EMAIL_ROLE") {
+    } else if (action === "CREATE_CUSTOM_ROLE") {
+      const rawCode = String(p.code || p.roleCode || "").trim().toUpperCase();
+      const code = rawCode.replace(/[^A-Z0-9_]/g, "_");
+      if (!code) {
+        return NextResponse.json(
+          { ok: false, errorAr: "رمز الدور الوظيفي غير صالح." },
+          { status: 400 }
+        );
+      }
+      const nameAr = String(p.nameAr || code).trim();
+      const descriptionAr = p.descriptionAr ? String(p.descriptionAr).trim() : null;
+      const permissions = Array.isArray(p.permissions)
+        ? (p.permissions as string[]).map((s) => String(s).trim()).filter(Boolean)
+        : [];
+
+      const role = await prisma.dynamicRole.upsert({
+        where: { code },
+        update: {
+          nameAr,
+          descriptionAr,
+          permissions,
+        },
+        create: {
+          code,
+          nameAr,
+          descriptionAr,
+          permissions,
+          isSystem: false,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          actorUserId: session.userId,
+          actionCode: "ROLE_CREATED_OR_UPDATED",
+          resourceType: "DynamicRole",
+          resourceId: role.id,
+          metadataJson: {
+            actorNameAr: session.fullNameAr,
+            roleCode: code,
+            nameAr,
+            permissionsCount: permissions.length,
+            descriptionAr: `إنشاء أو تحديث الدور الوظيفي (${nameAr} - ${code}) بعدد (${permissions.length}) صلاحية`,
+            tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
+          },
+        },
+      });
+      return NextResponse.json({ ok: true, role });
+    } else if (action === "UPDATE_ROLE_PERMISSIONS") {
+      const code = String(p.code || p.roleCode || "").trim().toUpperCase();
+      const permissions = Array.isArray(p.permissions)
+        ? (p.permissions as string[]).map((s) => String(s).trim()).filter(Boolean)
+        : [];
+      const nameAr = p.nameAr ? String(p.nameAr).trim() : undefined;
+      const descriptionAr =
+        p.descriptionAr !== undefined ? String(p.descriptionAr).trim() : undefined;
+
+      const updated = await prisma.dynamicRole.update({
+        where: { code },
+        data: {
+          permissions,
+          ...(nameAr ? { nameAr } : {}),
+          ...(descriptionAr !== undefined ? { descriptionAr } : {})
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          actorUserId: session.userId,
+          actionCode: "ROLE_PERMISSIONS_UPDATED",
+          resourceType: "DynamicRole",
+          resourceId: updated.id,
+          metadataJson: {
+            actorNameAr: session.fullNameAr,
+            roleCode: code,
+            permissionsCount: permissions.length,
+            descriptionAr: `تحديث مصفوفة صلاحيات الدور (${code}) إلى (${permissions.length}) صلاحية`,
+            tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
+          },
+        },
+      });
+      return NextResponse.json({ ok: true, role: updated });
+    } else if (action === "CREATE_BENEFICIARY_USER") {
+      const rawNid = String(p.nationalId || "").trim();
+      const nidRes = validateEgyptianNationalId(rawNid);
+      if (!nidRes.isValid || !nidRes.parsed) {
+        return NextResponse.json(
+          { ok: false, errorAr: nidRes.errorAr || "الرقم القومي المصري غير صالح." },
+          { status: 400 }
+        );
+      }
+
+      const fullNameAr = String(p.fullNameAr || "").trim();
+      const nameRes = validateFullName(fullNameAr);
+      if (!nameRes.isValid) {
+        return NextResponse.json(
+          { ok: false, errorAr: nameRes.messageAr || "الاسم الرباعي إلزامي وغير مكتمل." },
+          { status: 400 }
+        );
+      }
+
+      const rawMobile = String(p.mobile || p.phone || "").trim();
+      const phoneRes = normalizeAndValidateEgyptianMobile(rawMobile);
+      if (!phoneRes.isValid || !phoneRes.e164) {
+        return NextResponse.json(
+          { ok: false, errorAr: phoneRes.errorAr || "رقم الهاتف المحمول المصري غير صالح." },
+          { status: 400 }
+        );
+      }
+
+      const rawEmail = String(p.email || `${rawNid}@sanad.eg`).trim().toLowerCase();
+      const rawPassword = String(p.password || "Sanad@2026").trim();
+      const governorate = String(p.governorate || nidRes.parsed.governorateNameAr || "القاهرة").trim();
+      const address = String(p.address || "").trim();
+      const familyMembersCount = Number(p.familyMembersCount) || 1;
+      const monthlyIncomeEgp = Number(p.monthlyIncomeEgp) || 0;
+      const housingType = String(p.housingType || "إيجار عادي").trim();
+
+      const pepper = process.env.NATIONAL_ID_HMAC_PEPPER || "sanad-default-pepper-key";
+      const nationalIdHmac = createHmac("sha256", pepper).update(rawNid).digest("hex");
+      const maskedNid = maskEgyptianNationalId(rawNid);
+
+      const identity = await prisma.personIdentity.upsert({
+        where: { nationalIdHmac },
+        update: {
+          isVerified: true,
+          verifiedAt: new Date(),
+        },
+        create: {
+          nationalIdHmac,
+          nationalIdEncrypted: `enc:aes256gcm:${Buffer.from(rawNid).toString("base64")}`,
+          maskedNationalId: maskedNid,
+          birthDate: new Date(`${nidRes.parsed.birthDateIso}T00:00:00.000Z`),
+          governorateCode: nidRes.parsed.governorateCode,
+          isVerified: true,
+          verifiedAt: new Date(),
+        },
+      });
+
+      const user = await prisma.user.upsert({
+        where: { personIdentityId: identity.id },
+        update: {
+          email: rawEmail,
+          fullNameAr,
+          customRoleCode: "BENEFICIARY",
+          status: "ACTIVE",
+          passwordHash: hashPasswordScrypt(rawPassword),
+        },
+        create: {
+          personIdentityId: identity.id,
+          email: rawEmail,
+          fullNameAr,
+          customRoleCode: "BENEFICIARY",
+          customPermissions: [],
+          status: "ACTIVE",
+          passwordHash: hashPasswordScrypt(rawPassword),
+        },
+      });
+
+      await prisma.userPhone.create({
+        data: {
+          userId: user.id,
+          phoneE164: phoneRes.e164,
+          isPrimaryLogin: true,
+          isVerified: true,
+          verifiedAt: new Date(),
+        },
+      });
+
+      const firstTenant =
+        (await prisma.tenant.findFirst({
+          where: { type: "ASSOCIATION" },
+        })) || (await prisma.tenant.findFirst());
+
+      const ben = await prisma.beneficiary.upsert({
+        where: { personIdentityId: identity.id },
+        update: {
+          fullNameAr,
+          primaryContactPhone: phoneRes.e164,
+          maritalStatusAr: String(p.maritalStatus || "معيل لأسرة"),
+        },
+        create: {
+          personIdentityId: identity.id,
+          fullNameAr,
+          primaryContactPhone: phoneRes.e164,
+          maritalStatusAr: String(p.maritalStatus || "معيل لأسرة"),
+        },
+      });
+
+      await prisma.beneficiaryAccount.upsert({
+        where: { beneficiaryId: ben.id },
+        update: { userId: user.id },
+        create: {
+          beneficiaryId: ben.id,
+          userId: user.id,
+        },
+      });
+
+      if (firstTenant) {
+        const hhCode = `HH-${rawNid.slice(-6)}`;
+        await prisma.household.upsert({
+          where: {
+            tenantId_householdCode: {
+              tenantId: firstTenant.id,
+              householdCode: hhCode,
+            },
+          },
+          update: {
+            governorate,
+            cityOrCenterAr: governorate,
+            addressDetailsAr: address || `محافظة ${governorate}`,
+            primaryContactPhone: phoneRes.e164,
+            monthlyIncomePiasters: BigInt(Math.round(monthlyIncomeEgp * 100)),
+            housingConditionAr: housingType,
+            socialConditionsJson: {
+              familyMembersCount,
+              maritalStatus: String(p.maritalStatus || "معيل لأسرة"),
+            },
+          },
+          create: {
+            tenantId: firstTenant.id,
+            householdCode: hhCode,
+            governorate,
+            cityOrCenterAr: governorate,
+            addressDetailsAr: address || `محافظة ${governorate}`,
+            primaryContactPhone: phoneRes.e164,
+            monthlyIncomePiasters: BigInt(Math.round(monthlyIncomeEgp * 100)),
+            housingConditionAr: housingType,
+            socialConditionsJson: {
+              familyMembersCount,
+              maritalStatus: String(p.maritalStatus || "معيل لأسرة"),
+            },
+          },
+        });
+      }
+
+      await prisma.auditLog.create({
+        data: {
+          actorUserId: session.userId,
+          actionCode: "BENEFICIARY_USER_CREATED",
+          resourceType: "Beneficiary",
+          resourceId: ben.id,
+          metadataJson: {
+            actorNameAr: session.fullNameAr,
+            beneficiaryNameAr: fullNameAr,
+            email: rawEmail,
+            maskedNationalId: maskedNid,
+            phoneE164: phoneRes.e164,
+            governorate,
+            descriptionAr: `تسجيل مستفيد جديد بالرقم القومي (${maskedNid}) وتفعيل حسابه بالبريد (${rawEmail})`,
+            tenantNameAr: session.tenantNameAr || "الإدارة المركزية لمنصة سَنَد",
+          },
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        persisted: true,
+        beneficiaryId: ben.id,
+        userId: user.id,
+        email: rawEmail,
+      });
+    } else if (action === "ASSIGN_EMAIL_ROLE" || action === "ASSIGN_USER_ROLE_AND_PERMISSIONS") {
       const targetEmail = String(p.email || "")
         .trim()
         .toLowerCase();
@@ -707,7 +932,13 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      const assignedRole = String(p.role || "BENEFICIARY") as AuthRoleCode;
+      const assignedRole = String(p.role || p.roleCode || "BENEFICIARY");
+      const customPerms = Array.isArray(p.customPermissions)
+        ? (p.customPermissions as string[]).map((s) => String(s).trim()).filter(Boolean)
+        : Array.isArray(p.permissions)
+        ? (p.permissions as string[]).map((s) => String(s).trim()).filter(Boolean)
+        : [];
+
       const tenantId = p.tenantId ? String(p.tenantId) : null;
       let tenantNameAr = p.tenantNameAr ? String(p.tenantNameAr) : null;
       if (tenantId && !tenantNameAr) {
@@ -724,99 +955,76 @@ export async function POST(request: Request) {
       const pepper =
         process.env.NATIONAL_ID_HMAC_PEPPER || "sanad-default-pepper-key";
 
-      // 1. Locate existing User in PostgreSQL if present
-      const allPriorLogs = await prisma.auditLog.findMany({
+      // 1. Locate existing User in PostgreSQL directly by email or ID
+      let dbUser = await prisma.user.findFirst({
         where: {
-          actionCode: {
-            in: [
-              "AUTH_REGISTER_VERIFIED",
-              "ROLE_ASSIGNED_BY_SUPER_ADMIN",
-              "AUTH_LOGIN_VERIFIED",
-            ],
-          },
-          resourceId: { not: null },
+          OR: [
+            { email: targetEmail },
+            ...(p.userId ? [{ id: String(p.userId) }] : []),
+          ],
         },
-        orderBy: { createdAt: "desc" },
-        take: 300,
+        include: { personIdentity: true, phones: true },
       });
-
-      let existingUserId: string | null = null;
-      for (const log of allPriorLogs) {
-        const meta = (log.metadataJson || {}) as Record<string, unknown>;
-        const logEmail = String(meta.email || meta.targetEmail || "")
-          .trim()
-          .toLowerCase();
-        if (logEmail === targetEmail && log.resourceId) {
-          existingUserId = log.resourceId;
-          break;
-        }
-      }
 
       let finalUserId: string;
 
-      if (existingUserId) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: existingUserId },
-          include: { personIdentity: true, phones: true },
+      if (dbUser) {
+        finalUserId = dbUser.id;
+        const userUpdates: Record<string, unknown> = {
+          email: targetEmail,
+          fullNameAr,
+          status: "ACTIVE",
+          customRoleCode: assignedRole,
+          customPermissions: customPerms,
+        };
+        if (rawPassword && rawPassword.length >= 6) {
+          userUpdates.passwordHash = hashPasswordScrypt(rawPassword);
+          userUpdates.failedLoginAttempts = 0;
+          userUpdates.lockedUntil = null;
+        }
+        await prisma.user.update({
+          where: { id: dbUser.id },
+          data: userUpdates,
         });
 
-        if (dbUser) {
-          finalUserId = dbUser.id;
-          const userUpdates: Record<string, unknown> = {
-            fullNameAr,
-            status: "ACTIVE",
-          };
-          if (rawPassword && rawPassword.length >= 6) {
-            userUpdates.passwordHash = hashPasswordScrypt(rawPassword);
-            userUpdates.failedLoginAttempts = 0;
-            userUpdates.lockedUntil = null;
-          }
-          await prisma.user.update({
-            where: { id: dbUser.id },
-            data: userUpdates,
-          });
-
-          if (rawMobile) {
-            const pRes = normalizeAndValidateEgyptianMobile(rawMobile);
-            if (pRes.isValid && pRes.e164) {
-              const firstPhone = dbUser.phones[0];
-              if (firstPhone) {
-                await prisma.userPhone.update({
-                  where: { id: firstPhone.id },
-                  data: { phoneE164: pRes.e164, isVerified: true },
-                });
-              } else {
-                await prisma.userPhone.create({
-                  data: {
-                    userId: dbUser.id,
-                    phoneE164: pRes.e164,
-                    isPrimaryLogin: true,
-                    isVerified: true,
-                    verifiedAt: new Date(),
-                  },
-                });
-              }
+        if (rawMobile) {
+          const pRes = normalizeAndValidateEgyptianMobile(rawMobile);
+          if (pRes.isValid && pRes.e164) {
+            const firstPhone = dbUser.phones[0];
+            if (firstPhone) {
+              await prisma.userPhone.update({
+                where: { id: firstPhone.id },
+                data: { phoneE164: pRes.e164, isVerified: true },
+              });
+            } else {
+              await prisma.userPhone.create({
+                data: {
+                  userId: dbUser.id,
+                  phoneE164: pRes.e164,
+                  isPrimaryLogin: true,
+                  isVerified: true,
+                  verifiedAt: new Date(),
+                },
+              });
             }
           }
+        }
 
-          if (tenantId) {
-            await prisma.tenantMembership.upsert({
-              where: {
-                tenantId_userId: {
-                  tenantId,
-                  userId: dbUser.id,
-                },
-              },
-              update: { isActive: true },
-              create: {
+        if (tenantId) {
+          await prisma.tenantMembership.upsert({
+            where: {
+              tenantId_userId: {
                 tenantId,
                 userId: dbUser.id,
-                isActive: true,
               },
-            });
-          }
-        } else {
-          finalUserId = await createNewUserInDb();
+            },
+            update: { isActive: true },
+            create: {
+              tenantId,
+              userId: dbUser.id,
+              isActive: true,
+            },
+          });
         }
       } else {
         finalUserId = await createNewUserInDb();
@@ -859,9 +1067,12 @@ export async function POST(request: Request) {
         const createdUser = await prisma.user.create({
           data: {
             personIdentityId: identity.id,
+            email: targetEmail,
             fullNameAr,
             passwordHash: scryptHash,
             status: "ACTIVE",
+            customRoleCode: assignedRole,
+            customPermissions: customPerms,
             lastLoginAt: new Date(),
           },
         });
@@ -945,12 +1156,13 @@ export async function POST(request: Request) {
             role: session.role,
             targetEmail,
             assignedRole,
+            customPermissionsCount: customPerms.length,
             fullNameAr,
             tenantId,
             tenantNameAr: tenantNameAr || "الإدارة المركزية لمنصة سَنَد",
             phoneE164,
             maskedNationalId: maskedNid,
-            descriptionAr: `تعيين دور (${assignedRole}) والصلاحيات واعتماد كلمة المرور للبريد (${targetEmail}) بواسطة مدير المنصة`,
+            descriptionAr: `تعيين دور (${assignedRole}) وتخصيص (${customPerms.length}) صلاحية إضافية واعتماد كلمة المرور للبريد (${targetEmail}) بواسطة مدير المنصة`,
           },
         },
       });

@@ -154,9 +154,12 @@ model PersonIdentity {
 model User {
   id                  String        @id @default(uuid()) @db.Uuid
   personIdentityId    String        @unique @map("person_identity_id") @db.Uuid
+  email               String?       @unique @map("email") @db.VarChar(255)
   fullNameAr          String        @map("full_name_ar") @db.VarChar(200)
   passwordHash        String        @map("password_hash") @db.Text
   status              AccountStatus @default(PENDING_VERIFICATION)
+  customRoleCode      String?       @map("custom_role_code") @db.VarChar(100)
+  customPermissions   String[]      @default([]) @map("custom_permissions")
   failedLoginAttempts Int           @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime?     @map("locked_until") @db.Timestamptz(6)
   lastLoginAt         DateTime?     @map("last_login_at") @db.Timestamptz(6)
@@ -285,6 +288,19 @@ model RolePermission {
 
   @@unique([roleId, permissionId])
   @@map("role_permissions")
+}
+
+model DynamicRole {
+  id            String   @id @default(uuid()) @db.Uuid
+  code          String   @unique @db.VarChar(100)
+  nameAr        String   @map("name_ar") @db.VarChar(150)
+  descriptionAr String?  @map("description_ar") @db.Text
+  permissions   String[] @map("permissions")
+  isSystem      Boolean  @default(false) @map("is_system")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("dynamic_roles")
 }
 
 model Beneficiary {

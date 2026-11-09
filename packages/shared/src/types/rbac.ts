@@ -50,3 +50,14 @@ export const ROLE_PERMISSIONS_MATRIX: Record<RoleCode, string[]> = {
     "portal:corrections:submit_own",
   ],
 };
+
+export interface DynamicRoleDefinition {
+  id: string;
+  code: string;
+  nameAr: string;
+  descriptionAr?: string;
+  permissions: string[];
+  isSystem: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}

@@ -461,3 +461,109 @@ export function validateAllocationRequest(params: {
     reasonAr: "التخصيص المالي الذري مطابق لشروط المتبرع والرصيد المتاح.",
   };
 }
+
+export interface PermissionModuleGroup {
+  id: string;
+  nameAr: string;
+  titleAr?: string;
+  descriptionAr: string;
+  permissions: {
+    code: string;
+    labelAr: string;
+    descriptionAr: string;
+  }[];
+}
+
+export const PERMISSION_MODULES_AR: PermissionModuleGroup[] = [
+  {
+    id: "platform",
+    nameAr: "المنصة المركزية والحوكمة السيادية",
+    descriptionAr: "إدارة الكيانات والاعتمادات والمستخدمين وسجلات التدقيق",
+    permissions: [
+      { code: "platform:tenants:approve", labelAr: "اعتماد الجمعيات والمبادرات", descriptionAr: "مراجعة واعتماد الجمعيات الخيرية والمبادرات الأهلية وإصدار تراخيص العمل" },
+      { code: "platform:users:manage", labelAr: "إدارة المستخدمين والأدوار", descriptionAr: "إدارة حسابات المستخدمين وتعيين الأدوار وتعديل الصلاحيات واعتماد كلمات المرور" },
+      { code: "platform:reference_data:manage", labelAr: "الجداول المرجعية والسياسات", descriptionAr: "إدارة الجداول المرجعية ومحددات السياسات والحوكمة والرقمنة" },
+      { code: "platform:audit:read", labelAr: "سجلات التدقيق الجنائي", descriptionAr: "الاطلاع على سجلات التدقيق الجنائي غير القابلة للتعديل وتتبع العمليات" },
+      { code: "platform:stats:read", labelAr: "المؤشرات الإحصائية العامة", descriptionAr: "متابعة المؤشرات الإحصائية العامة ونسب الصرف ومؤشرات الأداء الوطنية" },
+    ],
+  },
+  {
+    id: "tenant_core",
+    nameAr: "إدارة الجمعية والكوادر والمستفيدين",
+    descriptionAr: "شؤون فريق العمل وملفات المستفيدين والتكوين الأسري والحالات",
+    permissions: [
+      { code: "tenant:members:manage", labelAr: "إدارة أعضاء الفريق", descriptionAr: "إدارة أعضاء فريق العمل والمتطوعين داخل نطاق الكيان" },
+      { code: "tenant:beneficiaries:manage", labelAr: "إدارة المستفيدين والرقم القومي", descriptionAr: "تسجيل وتعديل بيانات المستفيدين وفحص الأهلية بالرقم القومي المصري" },
+      { code: "tenant:households:manage", labelAr: "إدارة الأسر والبيئة المعيشية", descriptionAr: "إدارة ملفات الأسر والتكوين الأسري والظروف المعيشية والسكنية" },
+      { code: "tenant:cases:manage", labelAr: "إنشاء وإدارة الحالات", descriptionAr: "إنشاء ومتابعة الحالات المعزولة ومسارات المساعدة الخمسة" },
+      { code: "tenant:reports:read", labelAr: "التقارير وسجلات الأداء", descriptionAr: "استخراج تقارير الأداء والميزانيات وسجلات الحالات" },
+    ],
+  },
+  {
+    id: "social_research",
+    nameAr: "البحث الاجتماعي والرقابة الميدانية (SoD)",
+    descriptionAr: "إسناد الزيارات، رفع التقارير، والاعتماد الرقابي المفصول",
+    permissions: [
+      { code: "tenant:cases:decide_eligibility", labelAr: "اعتماد الأهلية النهائي", descriptionAr: "اعتماد قرار الأهلية النهائي وصرف الإعانات المعتمدة" },
+      { code: "tenant:cases:recommend_eligibility", labelAr: "التوصية بالأهلية", descriptionAr: "التوصية بقرار الأهلية ورفع تقرير الاستحقاق والاعتماد للمدير" },
+      { code: "tenant:cases:read_assigned", labelAr: "عرض الحالات المسندة", descriptionAr: "الاطلاع على الحالات المسندة للبحث الميداني أو المراجعة الرقابية" },
+      { code: "tenant:research:assign", labelAr: "إسناد الزيارات والباحثين", descriptionAr: "إسناد الزيارات الميدانية والأبحاث للباحثين والمتطوعين" },
+      { code: "tenant:research:review", labelAr: "مراجعة تقارير البحث", descriptionAr: "مراجعة واعتماد التقارير الميدانية مع تطبيق قواعد فصل المهام الرقابية SoD" },
+      { code: "tenant:research:submit_report", labelAr: "رفع تقرير الزيارة الميدانية", descriptionAr: "إجراء الزيارة الميدانية ورفع تقرير الاستحقاق والبيئة المعيشية والدخل" },
+      { code: "tenant:attachments:upload_authorized", labelAr: "رفع المستندات وصور المنزل", descriptionAr: "رفع المستندات وصور المنزل وبطاقات الهوية المعتمدة" },
+      { code: "tenant:tasks:read_assigned", labelAr: "قائمة المهام الميدانية", descriptionAr: "عرض قائمة المهام والزيارات الميدانية المسندة" },
+    ],
+  },
+  {
+    id: "donations_delivery",
+    nameAr: "التبرعات والحجز المالي والتسليم الميداني",
+    descriptionAr: "المتبرعون، القيود المشروطة، والتسليم بالرقم القومي",
+    permissions: [
+      { code: "tenant:donors:manage", labelAr: "إدارة المتبرعين", descriptionAr: "تسجيل بيانات المتبرعين وقنوات الدعم المالي والعيني" },
+      { code: "tenant:donations:manage", labelAr: "إدارة التبرعات والتحصيل", descriptionAr: "إدارة التبرعات وربطها بالمصارف المحددة وتأكيد التحصيل المالي" },
+      { code: "tenant:allocations:create", labelAr: "الحجز المالي الذري للمساعدات", descriptionAr: "إجراء الحجز المالي الذري للمساعدات لمنع ازدواج الصرف" },
+      { code: "tenant:deliveries:manage", labelAr: "جدولة تسليم المساعدات", descriptionAr: "جدولة وإدارة عمليات تسليم المساعدات للمستحقين" },
+      { code: "tenant:deliveries:confirm_assigned", labelAr: "تأكيد التسليم الميداني", descriptionAr: "التأكيد الميداني لتسليم المساعدة وتوثيق الاستلام بالرقم القومي" },
+    ],
+  },
+  {
+    id: "beneficiary_portal",
+    nameAr: "بوابة المستفيد الذاتية",
+    descriptionAr: "الملف الشخصي وطلبات المساعدة والتظلمات",
+    permissions: [
+      { code: "portal:profile:manage_own", labelAr: "إدارة الملف الشخصي للمستفيد", descriptionAr: "عرض وتحديث الملف الشخصي للمستفيد وإدارة موافقة مشاركة البيانات" },
+      { code: "portal:requests:create_own", labelAr: "تقديم طلب مساعدة إلكتروني", descriptionAr: "تقديم طلب مساعدة جديد إلكترونياً بالرقم القومي" },
+      { code: "portal:requests:read_own", labelAr: "متابعة حالة الطلبات", descriptionAr: "متابعة حالة طلبات المساعدة ومراحل البحث الميداني والتسليم" },
+      { code: "portal:documents:upload_own", labelAr: "رفع الوثائق الثبوتية", descriptionAr: "رفع المستندات الثبوتية والمؤيدة للطلب" },
+      { code: "portal:aid_history:read_own_verified", labelAr: "سجل المساعدات المستلمة", descriptionAr: "الاطلاع على سجل المساعدات المستلمة والمجدولة الموثقة" },
+      { code: "portal:corrections:submit_own", labelAr: "تقديم تظلم أو تصحيح بيانات", descriptionAr: "تقديم طلب تصحيح بيانات أو تظلم إلكتروني" },
+    ],
+  },
+];
+
+export function resolveRoleLabelAr(
+  roleCode: string,
+  dynamicRoles?: { code: string; nameAr: string }[]
+): string {
+  if (roleCode in ROLE_LABELS_AR) {
+    return ROLE_LABELS_AR[roleCode as AuthRoleCode];
+  }
+  const matched = dynamicRoles?.find((r) => r.code === roleCode);
+  if (matched) return matched.nameAr;
+  return roleCode;
+}
+
+export function resolveRolePermissions(
+  roleCode: string,
+  userCustomPermissions?: string[],
+  dynamicRoles?: { code: string; permissions: string[] }[]
+): string[] {
+  const userPerms = Array.isArray(userCustomPermissions) ? userCustomPermissions : [];
+  const matchedDynamic = dynamicRoles?.find((r) => r.code === roleCode);
+  const baseRolePerms = matchedDynamic
+    ? matchedDynamic.permissions
+    : (roleCode in ROLE_PERMISSIONS_MAP ? ROLE_PERMISSIONS_MAP[roleCode as AuthRoleCode] : []);
+
+  return Array.from(new Set([...baseRolePerms, ...userPerms]));
+}
+

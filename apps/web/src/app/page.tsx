@@ -16,10 +16,13 @@ import {
 import {
   canApproveResearchReport,
   validateAllocationRequest,
+  resolveRoleLabelAr,
+  resolveRolePermissions,
 } from "../lib/domain/sanad-rules";
 import {
   SuperAdminWorkspace,
   type ManagedUserItem,
+  type DynamicRoleItem,
 } from "../components/SuperAdminWorkspace";
 import { TenantAdminWorkspace } from "../components/TenantAdminWorkspace";
 import { ResearchSupervisorWorkspace } from "../components/ResearchSupervisorWorkspace";
@@ -49,7 +52,7 @@ export default function SanadDynamicPlatformPage() {
   const [sessionUser, setSessionUser] =
     useState<AuthenticatedSessionUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
-  const [activeView, setActiveView] = useState<TargetAuthRole>("BENEFICIARY");
+  const [activeView, setActiveView] = useState<string>("BENEFICIARY");
 
   const [tenants, setTenants] = useState<MockTenant[]>([]);
   const [cases, setCases] = useState<MockCase[]>([]);
@@ -61,6 +64,7 @@ export default function SanadDynamicPlatformPage() {
   const [auditLogs, setAuditLogs] = useState<MockAuditLog[]>([]);
   const [consents, setConsents] = useState<MockConsentItem[]>([]);
   const [managedUsers, setManagedUsers] = useState<ManagedUserItem[]>([]);
+  const [dynamicRoles, setDynamicRoles] = useState<DynamicRoleItem[]>([]);
 
   // Beneficiary 360 State
   const [beneficiaryProfiles, setBeneficiaryProfiles] = useState<
@@ -130,6 +134,8 @@ export default function SanadDynamicPlatformPage() {
         if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
         if (Array.isArray(data.managedUsers))
           setManagedUsers(data.managedUsers);
+        if (Array.isArray(data.roles))
+          setDynamicRoles(data.roles);
       }
     } catch {
       // Network error
@@ -345,7 +351,8 @@ export default function SanadDynamicPlatformPage() {
   const handleAssignEmailRole = async (payload: {
     email: string;
     fullNameAr?: string;
-    role: TargetAuthRole;
+    role: string;
+    customPermissions?: string[];
     tenantId?: string | null;
     tenantNameAr?: string | null;
     password?: string;
@@ -359,13 +366,98 @@ export default function SanadDynamicPlatformPage() {
         actorNameAr: actorDisplayName,
         actorRoleAr: actorRoleDisplay,
         actionCode: "ROLE_ASSIGNED_BY_SUPER_ADMIN",
-        descriptionAr: `تعيين الدور (${ROLE_LABELS_AR[payload.role] || payload.role}) للبريد (${payload.email}) مع اعتماد كلمة المرور والصلاحيات`,
+        descriptionAr: `تعيين الدور (${resolveRoleLabelAr(payload.role, dynamicRoles)}) للبريد (${payload.email}) مع اعتماد كلمة المرور والصلاحيات`,
         tenantNameAr: payload.tenantNameAr || "الإدارة المركزية لمنصة سَنَد",
       }
     );
     if (ok) {
       notify(
         `تم حفظ بيانات المستخدم (${payload.email}) واعتماد الدور وكلمة المرور بنجاح في قاعدة البيانات!`,
+        "success"
+      );
+      await fetchLiveDatabaseState();
+    }
+  };
+
+  const handleCreateCustomRole = async (payload: {
+    code: string;
+    nameAr: string;
+    descriptionAr?: string;
+    permissions: string[];
+  }) => {
+    const ok = await executeLiveAction(
+      "CREATE_CUSTOM_ROLE",
+      payload,
+      {
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
+        actionCode: "ROLE_CREATED_BY_SUPER_ADMIN",
+        descriptionAr: `إنشاء وتفعيل دور وظيفي جديد (${payload.nameAr} - ${payload.code}) بعدد (${payload.permissions.length}) صلاحية`,
+        tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
+      }
+    );
+    if (ok) {
+      notify(
+        `تم إنشاء الدور الوظيفي (${payload.nameAr}) وحفظ مصفوفة الصلاحيات في قاعدة البيانات بنجاح!`,
+        "success"
+      );
+      await fetchLiveDatabaseState();
+    }
+  };
+
+  const handleUpdateRolePermissions = async (payload: {
+    code: string;
+    nameAr?: string;
+    descriptionAr?: string;
+    permissions: string[];
+  }) => {
+    const ok = await executeLiveAction(
+      "UPDATE_ROLE_PERMISSIONS",
+      payload,
+      {
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
+        actionCode: "ROLE_PERMISSIONS_UPDATED_BY_SUPER_ADMIN",
+        descriptionAr: `تحديث مصفوفة صلاحيات الدور (${payload.code}) إلى (${payload.permissions.length}) صلاحية`,
+        tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
+      }
+    );
+    if (ok) {
+      notify(
+        `تم تحديث صلاحيات الدور (${payload.nameAr || payload.code}) وحفظ التعديلات في قاعدة البيانات!`,
+        "success"
+      );
+      await fetchLiveDatabaseState();
+    }
+  };
+
+  const handleCreateBeneficiaryUser = async (payload: {
+    nationalId: string;
+    fullNameAr: string;
+    mobile: string;
+    email?: string;
+    password?: string;
+    governorate?: string;
+    address?: string;
+    familyMembersCount?: number;
+    monthlyIncomeEgp?: number;
+    housingType?: string;
+    maritalStatus?: string;
+  }) => {
+    const ok = await executeLiveAction(
+      "CREATE_BENEFICIARY_USER",
+      payload,
+      {
+        actorNameAr: actorDisplayName,
+        actorRoleAr: actorRoleDisplay,
+        actionCode: "BENEFICIARY_REGISTERED_BY_ADMIN",
+        descriptionAr: `تسجيل مستفيد جديد (${payload.fullNameAr}) بالرقم القومي مع إنشاء بروفايل شامل`,
+        tenantNameAr: "الإدارة المركزية لمنصة سَنَد",
+      }
+    );
+    if (ok) {
+      notify(
+        `تم تسجيل المستفيد (${payload.fullNameAr}) وإنشاء البروفايل الشامل وحساب الدخول بنجاح!`,
         "success"
       );
       await fetchLiveDatabaseState();
@@ -799,27 +891,27 @@ export default function SanadDynamicPlatformPage() {
     { ...emptyFallbackTenant, type: "INDIVIDUAL" };
 
   // Effective view is strictly locked to sessionUser.role unless the user is SUPER_ADMIN
-  const effectiveRoleView: TargetAuthRole = sessionUser
+  const effectiveRoleView: string = sessionUser
     ? sessionUser.role === "SUPER_ADMIN"
       ? activeView
       : sessionUser.role
     : "BENEFICIARY";
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50 text-slate-900">
+    <div dir="rtl" className="min-h-screen bg-[var(--bg)] text-ink">
       {/* Main Navigation Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+      <header className="bg-white/85 backdrop-blur-md border-b border-line sticky top-0 z-30 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center font-bold text-base sm:text-lg shadow-sm shrink-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-[#15C7E0] via-[#6D5BF5] to-[#A23DEA] text-white flex items-center justify-center font-black text-lg shadow-md shrink-0">
                 س
               </div>
               <div>
-                <h1 className="font-bold text-base sm:text-lg text-slate-900 leading-tight">
+                <h1 className="font-extrabold text-base sm:text-lg text-ink leading-tight">
                   منصة سَنَد (SANAD)
                 </h1>
-                <p className="text-[11px] sm:text-xs text-slate-500 hidden sm:block">
+                <p className="text-[11px] sm:text-xs text-ink3 hidden sm:block">
                   نظام إدارة الجمعيات الخيرية والمبادرات الفردية والبحث الاجتماعي الميداني
                 </p>
               </div>
@@ -844,17 +936,15 @@ export default function SanadDynamicPlatformPage() {
             <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
               {/* Super Admin Module Inspector (Strictly ONLY for authenticated SUPER_ADMIN) */}
               {sessionUser.role === "SUPER_ADMIN" && (
-                <div className="flex items-center justify-between gap-1.5 bg-purple-50 border border-purple-200 rounded-xl px-2.5 py-1.5">
-                  <span className="text-[11px] font-bold text-purple-900 shrink-0">
+                <div className="flex items-center justify-between gap-1.5 bg-brandSoft border border-brandBorder rounded-xl px-2.5 py-1.5">
+                  <span className="text-[11px] font-bold text-brandInk shrink-0">
                     وحدة العرض:
                   </span>
                   <select
                     aria-label="تبديل وحدة المنصة لمدير النظام"
                     value={activeView}
-                    onChange={(e) =>
-                      setActiveView(e.target.value as TargetAuthRole)
-                    }
-                    className="bg-white border border-purple-300 rounded-lg px-2 py-1 text-xs font-bold text-purple-950 focus:outline-none flex-1 sm:flex-none cursor-pointer"
+                    onChange={(e) => setActiveView(e.target.value)}
+                    className="bg-white border border-brandBorder rounded-lg px-2 py-1 text-xs font-bold text-ink focus:outline-none flex-1 sm:flex-none cursor-pointer"
                   >
                     <option value="SUPER_ADMIN">
                       لوحة مدير المنصة المركزي (SUPER_ADMIN)
@@ -874,6 +964,23 @@ export default function SanadDynamicPlatformPage() {
                     <option value="BENEFICIARY">
                       معاينة بوابة المستفيد
                     </option>
+                    {dynamicRoles
+                      .filter(
+                        (r) =>
+                          ![
+                            "SUPER_ADMIN",
+                            "ASSOCIATION_ADMIN",
+                            "INDIVIDUAL_INITIATIVE",
+                            "RESEARCH_SUPERVISOR",
+                            "VOLUNTEER",
+                            "BENEFICIARY",
+                          ].includes(r.code)
+                      )
+                      .map((r) => (
+                        <option key={r.code} value={r.code}>
+                          معاينة دور مخصص: {r.nameAr}
+                        </option>
+                      ))}
                   </select>
                 </div>
               )}
@@ -881,16 +988,16 @@ export default function SanadDynamicPlatformPage() {
               {/* Verified User Identity & Role Badge */}
               <div className="flex items-center justify-between gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
                 <div className="text-right">
-                  <div className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <div className="text-xs font-extrabold text-ink flex items-center gap-1.5">
                     <span>{sessionUser.fullNameAr}</span>
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 text-[11px] font-bold">
-                      {ROLE_LABELS_AR[sessionUser.role]}
+                    <span className="ng-badge ng-badge-brand">
+                      {resolveRoleLabelAr(sessionUser.role, dynamicRoles)}
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono flex items-center gap-2">
                     <span className="truncate max-w-[160px] sm:max-w-none">{sessionUser.email}</span>
                     <span>•</span>
-                    <span className="text-purple-700 font-sans font-semibold shrink-0">
+                    <span className="text-brand font-sans font-semibold shrink-0">
                       {sessionUser.permissions.length} صلاحية
                     </span>
                   </div>
@@ -984,6 +1091,7 @@ export default function SanadDynamicPlatformPage() {
                   sharingRequests={sharingRequests}
                   auditLogs={auditLogs}
                   managedUsers={managedUsers}
+                  roles={dynamicRoles}
                   beneficiaryProfiles={beneficiaryProfiles}
                   onSelectBeneficiary={(p) => setActiveBeneficiaryModalProfile(p)}
                   onUpdateBeneficiaryProfile={handleUpdateBeneficiaryProfile}
@@ -991,6 +1099,9 @@ export default function SanadDynamicPlatformPage() {
                   onCreateTenant={handleCreateTenant}
                   onDecideSharingRequest={handleDecideSharingRequest}
                   onAssignEmailRole={handleAssignEmailRole}
+                  onCreateCustomRole={handleCreateCustomRole}
+                  onUpdateRolePermissions={handleUpdateRolePermissions}
+                  onCreateBeneficiaryUser={handleCreateBeneficiaryUser}
                   onInspectTenantWorkspace={(tenant) => {
                     if (tenant.type === "ASSOCIATION") {
                       setSelectedAssnTenantId(tenant.id);
@@ -1086,6 +1197,100 @@ export default function SanadDynamicPlatformPage() {
                 onSubmitBeneficiaryRequest={handleSubmitBeneficiaryRequest}
                 onToggleConsent={handleToggleConsent}
               />
+            )}
+
+            {/* Custom Dynamic Role Fallback Workspace */}
+            {!["SUPER_ADMIN", "ASSOCIATION_ADMIN", "INDIVIDUAL_INITIATIVE", "RESEARCH_SUPERVISOR", "VOLUNTEER", "BENEFICIARY"].includes(effectiveRoleView) && (
+              <div className="bg-white rounded-2xl border border-line p-6 shadow-sm space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-brandSoft text-brandInk border border-brandBorder">
+                        مساحة عمل دور مخصص (Custom Dynamic Role Workspace)
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                        {sessionUser?.role}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-extrabold text-ink mt-1.5">
+                      مرحباً بك: {sessionUser?.fullNameAr} ({resolveRoleLabelAr(sessionUser?.role || "", dynamicRoles)})
+                    </h3>
+                    <p className="text-xs text-ink3 mt-0.5">
+                      تم توثيق حسابك بنجاح ومنحك صلاحيات وظيفية مخصصة ومعتمدة من قبل إدارة المنصة.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-900">
+                      {sessionUser?.permissions.length || 0} صلاحية معتمدة
+                    </span>
+                  </div>
+                </div>
+
+                {/* Assigned Permissions View */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-ink">
+                    قائمة الصلاحيات المعتمدة لحسابك:
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {(sessionUser?.permissions || []).map((perm) => (
+                      <div
+                        key={perm}
+                        className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-start gap-2"
+                      >
+                        <span className="text-emerald-700 font-bold">✓</span>
+                        <div>
+                          <div className="font-mono text-[11px] font-bold text-slate-800">
+                            {perm}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            صلاحية نظام فعالة وموثقة
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Fast access to available modules based on permissions */}
+                <div className="pt-4 border-t border-line grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {sessionUser?.permissions.some((p) => p.startsWith("tenant:cases") || p.startsWith("tenant:donations")) && (
+                    <div className="p-4 rounded-xl border border-line bg-purple-50/40 space-y-2">
+                      <h5 className="text-xs font-bold text-purple-950">
+                        وحدة العمليات والحالات
+                      </h5>
+                      <p className="text-[11px] text-slate-600">
+                        لديك صلاحيات للاطلاع على حالات المستفيدين والتبرعات.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveView("ASSOCIATION_ADMIN")}
+                        className="px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-bold cursor-pointer"
+                      >
+                        فتح سجل الحالات والتبرعات ←
+                      </button>
+                    </div>
+                  )}
+
+                  {sessionUser?.permissions.some((p) => p.startsWith("social_research") || p.startsWith("volunteer")) && (
+                    <div className="p-4 rounded-xl border border-line bg-emerald-50/40 space-y-2">
+                      <h5 className="text-xs font-bold text-emerald-950">
+                        وحدة البحث الاجتماعي والمسوح الميدانية
+                      </h5>
+                      <p className="text-[11px] text-slate-600">
+                        لديك صلاحيات لمراجعة وتنسيق الأبحاث الميدانية.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveView("RESEARCH_SUPERVISOR")}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-bold cursor-pointer"
+                      >
+                        فتح وحدة البحث الميداني ←
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </>
         )}

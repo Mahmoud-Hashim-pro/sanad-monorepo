@@ -6,6 +6,9 @@ import {
   ROLE_LABELS_AR,
   PERMISSION_DESCRIPTIONS_AR,
   ROLE_GUIDE_ITEMS_AR,
+  PERMISSION_MODULES_AR,
+  resolveRoleLabelAr,
+  resolveRolePermissions,
 } from "../domain/sanad-rules";
 
 export {
@@ -14,6 +17,9 @@ export {
   ROLE_LABELS_AR,
   PERMISSION_DESCRIPTIONS_AR,
   ROLE_GUIDE_ITEMS_AR,
+  PERMISSION_MODULES_AR,
+  resolveRoleLabelAr,
+  resolveRolePermissions,
 };
 
 export interface SanadSessionPayload {
@@ -23,7 +29,8 @@ export interface SanadSessionPayload {
   maskedNationalId: string;
   phoneE164: string;
   governorateNameAr: string;
-  role: AuthRoleCode;
+  role: AuthRoleCode | string;
+  roleNameAr?: string;
   permissions: string[];
   tenantId: string | null;
   tenantNameAr: string | null;

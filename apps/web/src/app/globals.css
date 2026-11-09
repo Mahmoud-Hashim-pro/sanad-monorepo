@@ -1,11 +1,217 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Noto+Sans+Arabic:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
+:root {
+  color-scheme: light;
+  --bg: #F5F6F8;
+  --bg2: #FFFFFF;
+  --panel: #FFFFFF;
+  --navbg: rgba(245, 246, 248, 0.88);
+  --line: #E8EAEE;
+  --line2: #DADDE3;
+  --hover: #F2F3F5;
+  --ink: #0E1525;
+  --ink2: #586173;
+  --ink3: #4A5568;
+  --brand: #6D5BF5;
+  --brandInk: #5A47E0;
+  --brandSoft: #EEEBFE;
+  --brandSoft2: rgba(109, 91, 245, 0.18);
+  --brandBorder: #E0DAFC;
+  --brandShadow: rgba(109, 91, 245, 0.32);
+  --cyan: #11B6D4;
+  --grad: linear-gradient(120deg, #15C7E0 0%, #6D5BF5 55%, #A23DEA 100%);
+  --grad-subtle: linear-gradient(135deg, rgba(21, 199, 224, 0.08) 0%, rgba(109, 91, 245, 0.08) 50%, rgba(162, 61, 234, 0.08) 100%);
+  --ok: #15803D;
+  --okSoft: #E5F5EC;
+  --warn: #9A6006;
+  --warnSoft: #FBF1DE;
+  --danger: #C53030;
+  --dangerSoft: #FCEAE9;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 18px rgba(16, 24, 40, 0.06);
+  --shadowLg: 0 16px 48px rgba(16, 24, 40, 0.14);
+}
+
+html, body {
   direction: rtl;
   text-align: right;
-  background-color: #f8fafc;
-  color: #0f172a;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Cairo", sans-serif;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Noto Sans Arabic', 'Cairo', 'Tajawal', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Bi-directional content handling */
+input, textarea, select {
+  unicode-bidi: plaintext;
+}
+
+input[type="email"],
+input[type="url"],
+input[type="tel"],
+input[type="password"] {
+  text-align: left;
+  direction: ltr;
+}
+
+input[type="email"]::placeholder,
+input[type="url"]::placeholder,
+input[type="tel"]::placeholder,
+input[type="password"]::placeholder {
+  text-align: right;
+  direction: rtl;
+}
+
+/* NAGM Design System Utility Classes */
+.ng-grad-text {
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.ng-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+
+.ng-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  transition: transform 0.18s ease-out, box-shadow 0.18s ease-out, border-color 0.18s ease-out;
+}
+
+.ng-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--brandBorder);
+}
+
+.ng-btn-primary {
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 12px;
+  border: none;
+  background: var(--grad);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px var(--brandShadow);
+  text-decoration: none;
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+.ng-btn-primary:hover {
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 8px 20px var(--brandShadow);
+}
+
+.ng-btn-primary:active {
+  transform: scale(0.99);
+}
+
+.ng-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.ng-btn-ghost {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: background 0.15s ease-out, border-color 0.15s ease-out, transform 0.15s ease-out;
+}
+
+.ng-btn-ghost:hover {
+  background: var(--hover);
+  border-color: var(--line2);
+  transform: translateY(-1px);
+}
+
+.ng-btn-ghost:active {
+  transform: scale(0.99);
+}
+
+.ng-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 4px 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ng-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.ng-badge-ok {
+  color: var(--ok);
+  background: var(--okSoft);
+}
+
+.ng-badge-warn {
+  color: var(--warn);
+  background: var(--warnSoft);
+}
+
+.ng-badge-danger {
+  color: var(--danger);
+  background: var(--dangerSoft);
+}
+
+.ng-badge-brand {
+  color: var(--brandInk);
+  background: var(--brandSoft);
+}
+
+.ng-icon-tile {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--brandSoft);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.18s ease-out;
+}
+
+.ng-card:hover .ng-icon-tile {
+  transform: scale(1.05) rotate(2deg);
 }

@@ -194,15 +194,16 @@ export function AuthNationalIdWorkspace({
       }
     >
       {/* Right Side (in RTL): Clean Brand Panel About SANAD Platform Only (5 cols) */}
-      <aside className="lg:col-span-5 bg-gradient-to-br from-purple-950 via-purple-900 to-indigo-950 text-white p-5 sm:p-7 lg:p-10 flex flex-col justify-between space-y-4 sm:space-y-6 lg:space-y-8">
-        <div className="space-y-4 sm:space-y-6">
+      <aside className="lg:col-span-5 bg-gradient-to-br from-[#10141e] via-[#1c1836] to-[#2a1b4e] text-white p-5 sm:p-7 lg:p-10 flex flex-col justify-between space-y-4 sm:space-y-6 lg:space-y-8 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-brand/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="space-y-4 sm:space-y-6 relative z-10">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/15 border border-white/25 backdrop-blur flex items-center justify-center font-extrabold text-xl sm:text-2xl text-white shadow-inner shrink-0">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-[#15C7E0] via-[#6D5BF5] to-[#A23DEA] border border-white/20 backdrop-blur flex items-center justify-center font-black text-xl sm:text-2xl text-white shadow-md shrink-0">
                 س
               </div>
               <div>
-                <h1 className="font-extrabold text-lg sm:text-xl tracking-tight text-white">
+                <h1 className="font-black text-lg sm:text-xl tracking-tight text-white">
                   منصة سَنَد (SANAD)
                 </h1>
                 <p className="text-[11px] sm:text-xs text-purple-200">
@@ -222,7 +223,7 @@ export function AuthNationalIdWorkspace({
           </div>
 
           <div className="space-y-2.5 sm:space-y-4 pt-2 sm:pt-4 lg:pt-6">
-            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold leading-snug text-white">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black leading-snug text-white">
               الحوكمة الرقمية لإدارة الجمعيات الخيرية والمبادرات والبحث الميداني
             </h2>
             <p className="text-xs sm:text-sm text-purple-100/90 leading-relaxed">
@@ -231,9 +232,9 @@ export function AuthNationalIdWorkspace({
           </div>
         </div>
 
-        <div className="border-t border-white/15 pt-4 text-xs text-purple-200 flex items-center justify-between">
+        <div className="border-t border-white/15 pt-4 text-xs text-purple-200 flex items-center justify-between relative z-10">
           <span className="text-[11px] sm:text-xs">منصة سَنَد للتكافل والحوكمة الاجتماعية</span>
-          <span className="font-mono text-emerald-300 text-[11px] sm:text-xs">SANAD Platform</span>
+          <span className="font-mono text-cyan-300 text-[11px] sm:text-xs">SANAD Platform</span>
         </div>
       </aside>
 
@@ -255,14 +256,14 @@ export function AuthNationalIdWorkspace({
               </p>
             </div>
 
-            <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 w-full sm:w-auto">
+            <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-line w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => handleSwitchMode("LOGIN")}
                 className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold cursor-pointer transition text-center ${
                   authMode === "LOGIN"
-                    ? "bg-purple-700 text-white shadow-sm"
-                    : "text-slate-700 hover:text-slate-900"
+                    ? "bg-white text-ink shadow-sm font-extrabold"
+                    : "text-ink3 hover:text-ink"
                 }`}
               >
                 تسجيل الدخول
@@ -272,8 +273,8 @@ export function AuthNationalIdWorkspace({
                 onClick={() => handleSwitchMode("REGISTER")}
                 className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold cursor-pointer transition text-center ${
                   authMode === "REGISTER"
-                    ? "bg-purple-700 text-white shadow-sm"
-                    : "text-slate-700 hover:text-slate-900"
+                    ? "bg-white text-ink shadow-sm font-extrabold"
+                    : "text-ink3 hover:text-ink"
                 }`}
               >
                 إنشاء حساب جديد
@@ -380,7 +381,7 @@ export function AuthNationalIdWorkspace({
                   aria-label={
                     showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"
                   }
-                  className="absolute right-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 text-xs font-bold cursor-pointer flex items-center gap-1.5 transition"
+                  className="absolute right-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-brandSoft hover:bg-brandSoft2 border border-brandBorder text-brandInk text-xs font-bold cursor-pointer flex items-center gap-1.5 transition"
                 >
                   <span>{showPassword ? "🙈" : "👁️"}</span>
                   <span className="hidden sm:inline">{showPassword ? "إخفاء" : "إظهار"}</span>
@@ -467,7 +468,7 @@ export function AuthNationalIdWorkspace({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full min-h-[48px] py-3.5 rounded-xl bg-purple-700 hover:bg-purple-800 active:scale-[0.99] text-white text-sm sm:text-base font-extrabold shadow-md cursor-pointer transition disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full min-h-[48px] py-3.5 rounded-xl bg-gradient-to-r from-brand to-brandInk hover:opacity-95 active:scale-[0.99] text-white text-sm sm:text-base font-extrabold shadow-[0_8px_24px_rgba(109,91,245,0.28)] cursor-pointer transition disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {submitting
                 ? "جاري التحقق..."

@@ -9,6 +9,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        brand: {
+          DEFAULT: "#6D5BF5",
+          ink: "#5A47E0",
+          soft: "#EEEBFE",
+          border: "#E0DAFC",
+        },
+        nagmCyan: "#11B6D4",
+        line: {
+          DEFAULT: "#E8EAEE",
+          subtle: "#DADDE3",
+        },
+        ink: {
+          DEFAULT: "#0E1525",
+          muted: "#586173",
+          soft: "#4A5568",
+        },
         sanad: {
           50: "#f5f3ff",
           100: "#ede9fe",
