@@ -690,125 +690,145 @@ export function SuperAdminWorkspace({
 
         {/* Interactive Clickable Charity Cards Grid */}
         <div className="grid md:grid-cols-2 gap-4">
-          {filteredTenants.map((tenant) => (
-            <div
-              key={tenant.id}
-              onClick={() => setSelectedTenantDetails(tenant)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setSelectedTenantDetails(tenant);
-                }
-              }}
-              className="group rounded-2xl border border-slate-200 hover:border-purple-400 bg-slate-50/70 hover:bg-purple-50/30 p-4 shadow-sm hover:shadow-md cursor-pointer transition flex flex-col justify-between space-y-3"
-            >
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-900 text-[11px] font-bold">
-                      {tenant.type === "ASSOCIATION"
-                        ? "جمعية خيرية مشهرة"
-                        : "مبادرة فردية مستقلة"}
-                    </span>
-                    <h4 className="font-extrabold text-sm text-slate-900 group-hover:text-purple-800 mt-1">
-                      {tenant.nameAr}
-                    </h4>
-                  </div>
-                  <div>
-                    {tenant.status === "ACTIVE" && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
-                        نشط ومعتمد
-                      </span>
-                    )}
-                    {tenant.status === "PENDING_APPROVAL" && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
-                        بانتظار الاعتماد
-                      </span>
-                    )}
-                    {tenant.status === "SUSPENDED" && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-xs font-bold">
-                        موقوف مؤقتاً
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="text-xs text-slate-600">
-                  المحافظة: <strong>{tenant.governorate}</strong>{" "}
-                  {tenant.registrationNumber
-                    ? `• الإشهار: ${tenant.registrationNumber}`
-                    : "• مبادر فردي موثق"}
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center text-xs bg-white p-2.5 rounded-xl border border-slate-200">
-                  <div>
-                    <span className="text-slate-500 block">الحالات</span>
-                    <strong className="font-mono text-purple-900">
-                      {tenant.activeCasesCount}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">إجمالي التبرعات</span>
-                    <strong className="font-mono text-slate-900">
-                      {tenant.confirmedDonationsEgp.toLocaleString("ar-EG")} ج.م
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">الرصيد المتاح</span>
-                    <strong className="font-mono text-emerald-800">
-                      {tenant.availableBalanceEgp.toLocaleString("ar-EG")} ج.م
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80"
-                onClick={(e) => e.stopPropagation()}
+          {filteredTenants.length === 0 ? (
+            <div className="md:col-span-2 p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-2xl space-y-3">
+              <div className="text-3xl">🏢</div>
+              <h4 className="font-bold text-sm text-slate-800">
+                لا توجد جهات خيرية مسجلة حالياً بهذا التصنيف
+              </h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                النظام في حالة حوكمة نظيفة. يمكنك تسجيل جهة خيرية مشهرة أو مبادرة فردية مستقلة معتمدة فوراً بالنقر أدناه:
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAddTenantModal(true)}
+                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs cursor-pointer shadow-sm transition inline-flex items-center gap-1.5"
               >
-                <button
-                  type="button"
-                  onClick={() => setSelectedTenantDetails(tenant)}
-                  className="px-3 py-1.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-bold cursor-pointer transition"
-                >
-                  عرض كافة التفاصيل ({tenant.activeCasesCount} حالة)
-                </button>
+                <span>🏢</span>
+                <span>+ إضافة جهة خيرية أو مبادرة جديدة</span>
+              </button>
+            </div>
+          ) : (
+            filteredTenants.map((tenant) => (
+              <div
+                key={tenant.id}
+                onClick={() => setSelectedTenantDetails(tenant)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedTenantDetails(tenant);
+                  }
+                }}
+                className="group rounded-2xl border border-slate-200 hover:border-purple-400 bg-slate-50/70 hover:bg-purple-50/30 p-4 shadow-sm hover:shadow-md cursor-pointer transition flex flex-col justify-between space-y-3"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-900 text-[11px] font-bold">
+                        {tenant.type === "ASSOCIATION"
+                          ? "جمعية خيرية مشهرة"
+                          : "مبادرة فردية مستقلة"}
+                      </span>
+                      <h4 className="font-extrabold text-sm text-slate-900 group-hover:text-purple-800 mt-1">
+                        {tenant.nameAr}
+                      </h4>
+                    </div>
+                    <div>
+                      {tenant.status === "ACTIVE" && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                          نشط ومعتمد
+                        </span>
+                      )}
+                      {tenant.status === "PENDING_APPROVAL" && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
+                          بانتظار الاعتماد
+                        </span>
+                      )}
+                      {tenant.status === "SUSPENDED" && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-xs font-bold">
+                          موقوف مؤقتاً
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-1.5">
-                  {onInspectTenantWorkspace && (
-                    <button
-                      type="button"
-                      onClick={() => onInspectTenantWorkspace(tenant)}
-                      className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold cursor-pointer transition"
-                    >
-                      فتح مساحة العمل
-                    </button>
-                  )}
-                  {tenant.status !== "ACTIVE" ? (
-                    <button
-                      type="button"
-                      onClick={() => onUpdateTenantStatus(tenant.id, "ACTIVE")}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition"
-                    >
-                      اعتماد وتفعيل
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onUpdateTenantStatus(tenant.id, "SUSPENDED")
-                      }
-                      className="px-3 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-bold cursor-pointer transition"
-                    >
-                      إيقاف مؤقت
-                    </button>
-                  )}
+                  <div className="text-xs text-slate-600">
+                    المحافظة: <strong>{tenant.governorate}</strong>{" "}
+                    {tenant.registrationNumber
+                      ? `• الإشهار: ${tenant.registrationNumber}`
+                      : "• مبادر فردي موثق"}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs bg-white p-2.5 rounded-xl border border-slate-200">
+                    <div>
+                      <span className="text-slate-500 block">الحالات</span>
+                      <strong className="font-mono text-purple-900">
+                        {tenant.activeCasesCount}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">إجمالي التبرعات</span>
+                      <strong className="font-mono text-slate-900">
+                        {tenant.confirmedDonationsEgp.toLocaleString("ar-EG")} ج.م
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">الرصيد المتاح</span>
+                      <strong className="font-mono text-emerald-800">
+                        {tenant.availableBalanceEgp.toLocaleString("ar-EG")} ج.م
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTenantDetails(tenant)}
+                    className="px-3 py-1.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-bold cursor-pointer transition"
+                  >
+                    عرض كافة التفاصيل ({tenant.activeCasesCount} حالة)
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    {onInspectTenantWorkspace && (
+                      <button
+                        type="button"
+                        onClick={() => onInspectTenantWorkspace(tenant)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold cursor-pointer transition"
+                      >
+                        فتح مساحة العمل
+                      </button>
+                    )}
+                    {tenant.status !== "ACTIVE" ? (
+                      <button
+                        type="button"
+                        onClick={() => onUpdateTenantStatus(tenant.id, "ACTIVE")}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition"
+                      >
+                        اعتماد وتفعيل
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onUpdateTenantStatus(tenant.id, "SUSPENDED")
+                        }
+                        className="px-3 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-bold cursor-pointer transition"
+                      >
+                        إيقاف مؤقت
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </section>
 
@@ -1303,30 +1323,61 @@ export function SuperAdminWorkspace({
               return (
                 <div
                   key={role.code}
-                  className={`rounded-2xl border p-4 transition flex flex-col justify-between space-y-3 ${
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    setActiveRoleGuideTab(role.code);
+                    const el = document.getElementById("role-permissions-inspector");
+                    if (el) {
+                      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setActiveRoleGuideTab(role.code);
+                      const el = document.getElementById("role-permissions-inspector");
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                      }
+                    }
+                  }}
+                  className={`group relative rounded-2xl border p-4.5 transition-all duration-200 cursor-pointer select-none flex flex-col justify-between space-y-3.5 transform ${
                     isSelected
-                      ? "border-brand bg-brandSoft/30 shadow-sm ring-1 ring-brand"
-                      : "border-line bg-white hover:border-slate-300 shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
+                      ? "border-brand bg-gradient-to-br from-purple-50/90 via-white to-purple-50/40 shadow-md ring-2 ring-brand/50 -translate-y-1"
+                      : "border-line bg-white hover:border-brand/60 hover:bg-slate-50/70 hover:shadow-lg hover:-translate-y-1 shadow-[0_1px_3px_rgba(16,24,40,0.06)]"
                   }`}
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h5 className="font-extrabold text-sm text-ink leading-tight">
+                        <h5 className="font-extrabold text-sm text-ink group-hover:text-brand transition leading-tight">
                           {role.nameAr}
                         </h5>
-                        <span className="font-mono text-[10px] font-bold text-brand bg-brandSoft px-2 py-0.5 rounded mt-1 inline-block">
-                          {role.code}
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="font-mono text-[10px] font-bold text-brand bg-brandSoft px-2 py-0.5 rounded inline-block">
+                            {role.code}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                              role.isSystem
+                                ? "bg-slate-100 text-slate-700"
+                                : "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                            }`}
+                          >
+                            {role.isSystem ? "دور نظام" : "دور مخصص"}
+                          </span>
+                        </div>
                       </div>
+
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                          role.isSystem
-                            ? "bg-slate-100 text-slate-700"
-                            : "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 transition flex items-center gap-1 ${
+                          isSelected
+                            ? "bg-brand text-white shadow-xs"
+                            : "bg-slate-100 text-slate-500 group-hover:bg-brandSoft group-hover:text-brandInk"
                         }`}
                       >
-                        {role.isSystem ? "دور نظام" : "دور مخصص"}
+                        {isSelected ? "معروض الآن ✓" : "انقر للمعاينة 👈"}
                       </span>
                     </div>
 
@@ -1335,29 +1386,41 @@ export function SuperAdminWorkspace({
                     </p>
                   </div>
 
-                  <div className="pt-2 border-t border-line/60 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-line">
-                      {role.permissions.length} صلاحية معتمدة
+                  <div className="pt-2.5 border-t border-line/60 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-700 bg-slate-50 px-2.5 py-1 rounded-lg border border-line flex items-center gap-1">
+                      <span className="text-brand">🛡️</span>
+                      <span>{role.permissions.length} صلاحية معتمدة</span>
                     </span>
 
-                    <div className="flex items-center gap-1.5">
+                    <div
+                      className="flex items-center gap-1.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
-                        onClick={() => handleOpenEditRole(role)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-ink text-[11px] font-bold cursor-pointer transition"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditRole(role);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-ink text-[11px] font-bold cursor-pointer transition shadow-2xs"
                       >
                         تعديل الصلاحيات
                       </button>
                       <button
                         type="button"
-                        onClick={() => setActiveRoleGuideTab(role.code)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition ${
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveRoleGuideTab(role.code);
+                          const el = document.getElementById("role-permissions-inspector");
+                          if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition flex items-center gap-1 shadow-2xs ${
                           isSelected
-                            ? "bg-brand text-white"
-                            : "bg-brandSoft text-brandInk hover:bg-brandSoft2"
+                            ? "bg-brand text-white shadow-xs"
+                            : "bg-brandSoft text-brandInk hover:bg-brand hover:text-white"
                         }`}
                       >
-                        عرض
+                        <span>{isSelected ? "معروض ✓" : "عرض الصلاحيات"}</span>
                       </button>
                     </div>
                   </div>
@@ -1375,7 +1438,10 @@ export function SuperAdminWorkspace({
             const perms = currentRole.permissions || [];
 
             return (
-              <div className="bg-slate-50/70 border border-line rounded-2xl p-4 space-y-4">
+              <div
+                id="role-permissions-inspector"
+                className="bg-slate-50/70 border border-line rounded-2xl p-4 space-y-4 scroll-mt-6"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
                   <div>
                     <div className="flex items-center gap-2">

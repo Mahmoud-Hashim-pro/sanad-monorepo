@@ -102,7 +102,26 @@ export function ResearchSupervisorWorkspace({
           return (
             <div
               key={c.id}
-              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between space-y-4"
+              onClick={() =>
+                handleOpenBeneficiaryProfile({
+                  name: c.beneficiaryNameAr,
+                  phone: c.phoneE164,
+                  nationalId: c.nationalId || c.maskedNationalId,
+                })
+              }
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleOpenBeneficiaryProfile({
+                    name: c.beneficiaryNameAr,
+                    phone: c.phoneE164,
+                    nationalId: c.nationalId || c.maskedNationalId,
+                  });
+                }
+              }}
+              className="bg-white rounded-2xl border border-slate-200 hover:border-purple-400 hover:shadow-md cursor-pointer transition flex flex-col justify-between space-y-4 p-5"
             >
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
@@ -140,7 +159,10 @@ export function ResearchSupervisorWorkspace({
                 </div>
 
                 {/* Assign Volunteer Row */}
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <div
+                  className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-600">الباحث الميداني الحالي:</span>
                     <strong className="text-slate-900">{c.assignedVolunteerAr}</strong>
@@ -212,7 +234,10 @@ export function ResearchSupervisorWorkspace({
               </div>
 
               {/* Supervisor Decision Actions */}
-              <div className="pt-2 border-t border-slate-100 space-y-2">
+              <div
+                className="pt-2 border-t border-slate-100 space-y-2"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="text-xs font-bold text-slate-700">
                   إصدار قرار لجنة البحث الاجتماعي والأهلية:
                 </div>
